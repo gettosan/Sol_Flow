@@ -47,3 +47,4 @@ temp/
 *.pem
 *.key
 wallets/
+solana_wallets.json

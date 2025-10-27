@@ -72,11 +72,11 @@ export interface QuoteRequest {
 }
 
 export interface SwapRequest {
-  quoteId: string;
-  userPublicKey: string;
-  slippage: number;
-  useMevProtection: boolean;
-  priority: 'low' | 'medium' | 'high';
+  quote: SwapQuote;
+  userWallet: string;
+  slippageBps?: number;
+  useMevProtection?: boolean;
+  priority?: 'low' | 'medium' | 'high';
 }
 
 export interface SwapResponse {
