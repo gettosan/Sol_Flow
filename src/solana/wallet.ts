@@ -50,8 +50,18 @@ export function loadWalletFromFile(walletName: string = 'main_wallet'): Keypair 
       return null;
     }
     
-    // Decode the private key from base58
-    const decoded = bs58.decode(walletData.private_key);
+    // Decode the secret key (hex format)
+    let decoded: Uint8Array;
+    
+    // Try to decode from hex first (fallback)
+    if (walletData.secret_key && walletData.secret_key.length === 64) {
+      const hexBuffer = Buffer.from(walletData.secret_key, 'hex');
+      decoded = new Uint8Array(hexBuffer);
+    } else {
+      // Try base58 decoding for Solana standard format
+      decoded = bs58.decode(walletData.private_key);
+    }
+    
     const keypair = Keypair.fromSecretKey(decoded);
     
     logger.info(`Loaded wallet: ${walletData.name} (${walletData.public_key})`);
@@ -74,12 +84,13 @@ export function getBackendWallet(): Keypair | null {
  * Generate a new wallet keypair for testing
  * DO NOT USE IN PRODUCTION
  */
-export function generateTestWallet(): { publicKey: string; privateKey: string } {
+export function generateTestWallet(): { publicKey: string; privateKey: string; secretKey: string } {
   const keypair = Keypair.generate();
   
   return {
     publicKey: keypair.publicKey.toString(),
     privateKey: bs58.encode(keypair.secretKey),
+    secretKey: Buffer.from(keypair.secretKey).toString('hex'),
   };
 }
 

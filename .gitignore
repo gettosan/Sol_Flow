@@ -48,3 +48,7 @@ temp/
 *.key
 wallets/
 solana_wallets.json
+.env.devnet
+.env.test
+.env.production
+*.env
