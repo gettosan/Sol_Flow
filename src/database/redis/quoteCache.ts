@@ -45,6 +45,34 @@ export class QuoteCache {
     const key = this.getKey(quoteId);
     await this.redis.del(key);
   }
+  
+  /**
+   * Cache quote by token pair and amount
+   */
+  async cacheQuote(inputMint: string, outputMint: string, amount: string, quote: SwapQuote): Promise<void> {
+    const key = `quote:${inputMint}:${outputMint}:${amount}`;
+    await this.redis.setex(key, TTL, JSON.stringify(quote));
+  }
+  
+  /**
+   * Get cached quote by token pair and amount
+   */
+  async getQuote(inputMint: string, outputMint: string, amount: string): Promise<SwapQuote | null> {
+    const key = `quote:${inputMint}:${outputMint}:${amount}`;
+    const data = await this.redis.get(key);
+    
+    if (!data) return null;
+    
+    const quote = JSON.parse(data) as SwapQuote;
+    
+    // Check if expired
+    if (Date.now() > quote.expiresAt) {
+      await this.redis.del(key);
+      return null;
+    }
+    
+    return quote;
+  }
 
   /**
    * Cache route for token pair
