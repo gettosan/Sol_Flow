@@ -9,6 +9,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added - 2024-10-27
 
+#### Feature 5: Smart Router Engine with Pathfinding
+
+**What was built:**
+- Modified Dijkstra's algorithm for multi-hop DEX routing
+- Liquidity graph builder for constructing pool networks
+- Route optimizer that selects best execution paths
+- Multi-leg route builder for complex swaps
+- Slippage calculator for route impact estimation
+- Routing efficiency scoring (0-100%)
+- Support for direct and multi-hop routes
+- Configurable max hops and slippage tolerance
+
+**Files Created:**
+- `src/router/types.ts` - Router interfaces and types
+- `src/router/graph.ts` - Liquidity graph builder with BFS pathfinding
+- `src/router/pathfinding.ts` - Dijkstra's algorithm implementation
+- `src/router/optimizer.ts` - Unified route optimizer
+- `tests/unit/smart-router.test.ts` - Comprehensive router tests
+
+**Design Decisions:**
+
+1. **Graph-Based Architecture**: Uses adjacency list representation for efficient traversal
+
+2. **Dijkstra's Algorithm**: Modified shortest-path algorithm optimized for DEX routing with fee and slippage considerations
+
+3. **BFS Path Discovery**: Breadth-first search finds all possible paths between tokens
+
+4. **Direct vs Multi-Hop**: Prefers direct pools when available, falls back to multi-hop routing
+
+5. **Efficiency Scoring**: Calculates route efficiency based on output amount, fees, and price impact
+
+6. **Configurable Routing**: Supports max hops, slippage tolerance, and preferred DEX selection
+
+**Known Issues/Limitations:**
+
+1. **Simplified AMM Formula**: Uses constant product formula approximation - needs real pool state
+2. **Mock Liquidity**: Graph is built from configuration - needs actual on-chain pool data
+3. **Price Impact**: Currently estimated - needs real-time DEX data for accuracy
+4. **Amount Calculation**: Multi-hop amounts simplified - needs proper amount tracking
+
+**Testing:**
+- Unit tests (11 tests) - All passing ✓
+- Tests cover graph building, pathfinding, efficiency calculation
+- Validates direct routes, multi-hop routes, and edge cases
+
+---
+
+### Added - 2024-10-27
+
 #### Feature 4: DEX Aggregation Layer (Jupiter, Orca, Raydium)
 
 **What was built:**
