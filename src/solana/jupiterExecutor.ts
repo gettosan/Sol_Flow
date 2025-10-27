@@ -87,7 +87,12 @@ export class JupiterExecutor {
       
       return response.data;
     } catch (error: any) {
-      logger.error('Failed to get Jupiter order', { error: error.message });
+      // Handle API errors gracefully
+      if (error.response?.data?.error) {
+        logger.warn('Jupiter API error', { error: error.response.data.error });
+      } else {
+        logger.error('Failed to get Jupiter order', { error: error.message });
+      }
       throw error;
     }
   }
