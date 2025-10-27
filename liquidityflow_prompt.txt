@@ -1,0 +1,3548 @@
+# LiquidityFlow Backend Complete Development Prompt
+
+## Project Overview
+Build the complete backend for **LiquidityFlow**, a real-time decentralized liquidity aggregation protocol for Solana using MagicBlock's Ephemeral Rollups and Fetch.ai autonomous agents. This backend will handle liquidity routing, smart order execution, agent coordination, and real-time quote aggregation on **Solana Devnet**.
+
+---
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     LiquidityFlow Backend                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │         REST API Layer (Express.js)                       │   │
+│  │  GET /api/quotes                                          │   │
+│  │  POST /api/swap                                           │   │
+│  │  GET /api/routes                                          │   │
+│  │  POST /api/agents/execute                                 │   │
+│  │  WS /api/stream (real-time quotes)                        │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                           ↓                                       │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │    Smart Router Engine (Typescript/Node.js)              │   │
+│  │  - DEX Aggregation (Orca, Raydium, Jupiter APIs)         │   │
+│  │  - Pathfinding Algorithm (multi-leg routing)             │   │
+│  │  - Price optimization logic                              │   │
+│  │  - Slippage calculation                                  │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                           ↓                                       │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │    Solana Program Interface (Anchor/Rust)                │   │
+│  │  - SwapExecutor Program                                  │   │
+│  │  - LiquidityAggregator Program                           │   │
+│  │  - MEV Protection Program                                │   │
+│  │  - Devnet RPC connections                                │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                           ↓                                       │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │    Fetch.ai Autonomous Agents (Python/uAgents)           │   │
+│  │  - Market Analysis Agent                                 │   │
+│  │  - Smart Router Agent                                    │   │
+│  │  - Autonomous MM Agent                                   │   │
+│  │  - MEV Hunter Agent                                      │   │
+│  │  - Agent coordination via uAgents protocol               │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                           ↓                                       │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │    External Integrations                                 │   │
+│  │  - Jupiter API (best swap route aggregation)             │   │
+│  │  - Orca SDK (liquidity pool data)                        │   │
+│  │  - Raydium SDK (AMM liquidity)                           │   │
+│  │  - Switchboard Oracles (price feeds)                     │   │
+│  │  - Solana RPC (devnet)                                   │   │
+│  │  - MagicBlock Ephemeral Rollups (future)                 │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                           ↓                                       │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │    Database Layer (PostgreSQL + Redis)                   │   │
+│  │  - PostgreSQL: historical trades, liquidity snapshots    │   │
+│  │  - Redis: real-time cache, quote caching                 │   │
+│  │  - MeTTa Knowledge Graph: trading patterns               │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Technology Stack
+
+### Backend Core
+- **Runtime**: Node.js 18+
+- **Language**: TypeScript 5.0+
+- **Framework**: Express.js 4.18+
+- **Async Queue**: Bull 4.10+ (Redis-backed job queue)
+- **WebSocket**: Socket.io 4.6+ (real-time quote streaming)
+
+### Blockchain Integration
+- **Solana**: @solana/web3.js 1.87+, @project-serum/anchor 0.28+
+- **DEX APIs**: @jup-ag/api 6.0+, @orca-so/sdk 1.0+, @raydium-io/raydium-sdk 1.3+
+- **Oracles**: @switchboard-xyz/solana.js 2.0+
+- **RPC**: Devnet endpoint (https://api.devnet.solana.com)
+
+### Autonomous Agents
+- **Framework**: Python 3.10+ with uagents 0.12+
+- **Knowledge Graph**: MeTTa (via SingularityNET)
+- **IPC**: @grpc/grpc-js 1.9+ for Node.js ↔ Python agent communication
+
+### Database
+- **PostgreSQL**: 15+ with pg 8.11+
+- **Redis**: 7+ with ioredis 5.3+
+- **MeTTa**: Knowledge base for agent reasoning
+
+### DevOps & Testing
+- **Testing**: Jest 29+ with ts-jest 29+
+- **Environment**: Docker Compose 2.20+ for local dev
+- **Logging**: Winston 3.10+
+- **Monitoring**: Prometheus client 15+
+- **Live Testing**: Solana Devnet
+
+---
+
+## Project Structure
+
+```
+liquidity-flow-backend/
+├── src/
+│   ├── types/
+│   │   ├── index.ts               # Core type definitions (START HERE)
+│   │   ├── api.types.ts           # API request/response types
+│   │   ├── dex.types.ts           # DEX-specific types
+│   │   ├── agent.types.ts         # Agent message types
+│   │   └── errors.types.ts        # Error type definitions
+│   │
+│   ├── api/
+│   │   ├── routes/
+│   │   │   ├── quotes.ts          # GET /api/quotes
+│   │   │   ├── swap.ts            # POST /api/swap
+│   │   │   ├── routes.ts          # GET /api/routes
+│   │   │   ├── agents.ts          # POST /api/agents/execute
+│   │   │   └── health.ts          # GET /api/health
+│   │   ├── middleware/
+│   │   │   ├── auth.ts            # Rate limiting, validation
+│   │   │   ├── errorHandler.ts    # Global error handling
+│   │   │   ├── requestLogger.ts   # Request logging
+│   │   │   └── validation.ts      # Input validation middleware
+│   │   ├── websocket/
+│   │   │   └── priceStream.ts     # Real-time quote WebSocket
+│   │   └── server.ts              # Express app setup
+│   │
+│   ├── core/
+│   │   ├── smartRouter/
+│   │   │   ├── pathfinder.ts      # Multi-leg routing algorithm
+│   │   │   ├── priceOptimizer.ts  # Dynamic fee optimization
+│   │   │   ├── slippageCalc.ts    # Slippage estimation
+│   │   │   └── routeValidator.ts  # Validate routes before execution
+│   │   │
+│   │   ├── dexAggregator/
+│   │   │   ├── jupiterClient.ts   # Jupiter API integration
+│   │   │   ├── orcaClient.ts      # Orca SDK integration
+│   │   │   ├── raydiumClient.ts   # Raydium SDK integration
+│   │   │   ├── priceFeeds.ts      # Switchboard oracle integration
+│   │   │   └── liquidityCache.ts  # Cache DEX liquidity
+│   │   │
+│   │   ├── solanaPrograms/
+│   │   │   ├── swapExecutor.ts    # Execute swaps on-chain
+│   │   │   ├── mevProtection.ts   # Private execution logic
+│   │   │   ├── agentRegistry.ts   # Agent address management
+│   │   │   └── devnetConnection.ts # Solana devnet RPC setup
+│   │   │
+│   │   └── quoteEngine/
+│   │       ├── quoteGenerator.ts  # Real-time quote generation
+│   │       ├── quoteValidator.ts  # Validate quotes
+│   │       └── quoteCache.ts      # Redis-based quote caching
+│   │
+│   ├── agents/
+│   │   ├── marketAnalysis.agent.ts    # Market Analysis Agent
+│   │   ├── smartRouter.agent.ts       # Smart Router Agent
+│   │   ├── autonomousMM.agent.ts      # Autonomous MM Agent
+│   │   ├── mevHunter.agent.ts         # MEV Hunter Agent
+│   │   ├── agentCoordinator.ts        # Agent-to-agent communication
+│   │   └── agentTypes.ts              # Type definitions
+│   │
+│   ├── database/
+│   │   ├── postgres/
+│   │   │   ├── migrations/
+│   │   │   │   ├── 001_create_trades_table.ts
+│   │   │   │   ├── 002_create_liquidity_snapshots.ts
+│   │   │   │   └── 003_create_agent_logs.ts
+│   │   │   ├── schema.ts           # Database schema definitions
+│   │   │   ├── trades.ts           # Trade ORM queries
+│   │   │   ├── liquiditySnapshots.ts
+│   │   │   └── connection.ts       # PostgreSQL connection pool
+│   │   │
+│   │   ├── redis/
+│   │   │   ├── client.ts           # Redis connection
+│   │   │   ├── quoteCache.ts       # Quote caching logic
+│   │   │   └── sessionStore.ts     # Session management
+│   │   │
+│   │   └── metta/
+│   │       ├── knowledgeGraph.ts   # MeTTa knowledge base
+│   │       ├── patterns.ts         # Trading pattern storage
+│   │       └── reasoning.ts        # MeTTa query engine
+│   │
+│   ├── utils/
+│   │   ├── logger.ts               # Winston logging
+│   │   ├── validators.ts           # Input validation
+│   │   ├── errors.ts               # Custom error classes
+│   │   ├── constants.ts            # Network constants, token mints
+│   │   ├── math.ts                 # BN calculations
+│   │   └── tokenMetadata.ts        # Token info helpers
+│   │
+│   ├── config/
+│   │   ├── index.ts                # Environment config
+│   │   ├── devnet.ts               # Devnet-specific config
+│   │   └── constants.ts            # Network constants
+│   │
+│   └── index.ts                    # Main entry point
+
+├── agents/
+│   ├── market_analysis_agent.py    # Python uAgents agent
+│   ├── smart_router_agent.py
+│   ├── autonomous_mm_agent.py
+│   ├── mev_hunter_agent.py
+│   ├── agent_config.py             # Agent configuration
+│   └── proto/
+│       └── agent_service.proto     # gRPC service definitions
+│
+├── programs/
+│   ├── swap_executor/
+│   │   ├── src/
+│   │   │   ├── lib.rs              # Main Anchor program
+│   │   │   ├── instructions/
+│   │   │   │   ├── initialize.rs
+│   │   │   │   ├── execute_swap.rs
+│   │   │   │   └── route_swap.rs
+│   │   │   ├── state/
+│   │   │   │   └── mod.rs
+│   │   │   └── error.rs
+│   │   ├── Cargo.toml
+│   │   └── Anchor.toml
+│   │
+│   └── mev_protection/
+│       ├── src/
+│       │   ├── lib.rs
+│       │   ├── instructions/
+│       │   │   ├── private_execute.rs
+│       │   │   └── randomize_route.rs
+│       │   └── state/
+│       │       └── mod.rs
+│       ├── Cargo.toml
+│       └── Anchor.toml
+│
+├── tests/
+│   ├── unit/
+│   │   ├── smartRouter.test.ts
+│   │   ├── dexAggregator.test.ts
+│   │   ├── quoteEngine.test.ts
+│   │   ├── slippageCalc.test.ts
+│   │   └── pathfinder.test.ts
+│   │
+│   ├── integration/
+│   │   ├── devnetSwap.test.ts      # Real devnet swap execution
+│   │   ├── multiLegRoute.test.ts   # Multi-leg swap test
+│   │   ├── agentCommunication.test.ts
+│   │   └── endToEnd.test.ts
+│   │
+│   └── fixtures/
+│       ├── mockPrices.ts
+│       ├── mockRoutes.ts
+│       ├── mockPoolData.ts
+│       └── devnetWallet.ts
+│
+├── docker/
+│   ├── Dockerfile
+│   ├── Dockerfile.agent
+│   └── docker-compose.yml
+│
+├── docs/
+│   ├── SETUP.md
+│   ├── API_ENDPOINTS.md
+│   ├── AGENT_PROTOCOL.md
+│   ├── ALGORITHMS.md              # Pathfinding & optimization details
+│   └── DEVNET_TESTING.md
+│
+├── scripts/
+│   ├── deploy-programs.sh
+│   ├── setup-devnet-wallet.sh
+│   └── seed-database.ts
+│
+├── .env.example
+├── .env.devnet
+├── package.json
+├── tsconfig.json
+├── jest.config.js
+├── .eslintrc.js
+├── .prettierrc
+├── docker-compose.yml
+└── README.md
+```
+
+---
+
+## Core Type Definitions (Generate First)
+
+**src/types/index.ts** - Generate this before any other code:
+
+```typescript
+import { PublicKey } from '@solana/web3.js';
+
+// ============================================================================
+// Core Domain Types
+// ============================================================================
+
+export interface TokenInfo {
+  mint: string;
+  symbol: string;
+  decimals: number;
+  logoURI?: string;
+}
+
+export interface SwapQuote {
+  inputAmount: string;
+  outputAmount: string;
+  priceImpact: number;
+  routes: RouteSegment[];
+  estimatedGas: number;
+  timestamp: number;
+  quoteId: string;
+  mevProtected: boolean;
+  expiresAt: number;
+}
+
+export interface RouteSegment {
+  dex: 'Jupiter' | 'Orca' | 'Raydium';
+  percentage: number;
+  amountOut: string;
+  poolAddress?: string;
+  priceImpact: number;
+}
+
+export interface MultiLegRoute {
+  legs: RouteLeg[];
+  totalOutputAmount: string;
+  efficiency: number; // 0-100%
+  totalPriceImpact: number;
+  estimatedGas: number;
+}
+
+export interface RouteLeg {
+  dex: string;
+  inputMint: string;
+  outputMint: string;
+  inputAmount: string;
+  outputAmount: string;
+  poolAddress: string;
+  priceImpact: number;
+}
+
+export interface LiquidityPool {
+  address: string;
+  dex: string;
+  tokenA: TokenInfo;
+  tokenB: TokenInfo;
+  liquidityA: string;
+  liquidityB: string;
+  price: number;
+  fee: number; // in bps
+  tvl: number;
+  volume24h: number;
+}
+
+// ============================================================================
+// API Request/Response Types
+// ============================================================================
+
+export interface QuoteRequest {
+  inputMint: string;
+  outputMint: string;
+  amount: string;
+  slippage: number;
+}
+
+export interface SwapRequest {
+  quoteId: string;
+  userPublicKey: string;
+  slippage: number;
+  useMevProtection: boolean;
+  priority: 'low' | 'medium' | 'high';
+}
+
+export interface SwapResponse {
+  transactionHash: string;
+  status: 'pending' | 'confirmed' | 'failed';
+  inputAmount: string;
+  outputAmount: string;
+  actualPrice: string;
+  route: RouteSegment[];
+  timestamp: number;
+  savings: {
+    bpsVsMarket: number;
+    mevProtectionBps: number;
+  };
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: ApiError;
+  metadata: {
+    timestamp: number;
+    requestId: string;
+    serverVersion: string;
+  };
+}
+
+export interface ApiError {
+  code: string;
+  message: string;
+  details?: any;
+}
+
+// ============================================================================
+// Agent Types
+// ============================================================================
+
+export interface AgentMessage {
+  agentId: string;
+  agentType: 'marketAnalysis' | 'smartRouter' | 'autonomousMM' | 'mevHunter';
+  action: string;
+  params: any;
+  timestamp: number;
+  correlationId: string;
+}
+
+export interface AgentResponse {
+  agentId: string;
+  action: string;
+  result: any;
+  confidence: number; // 0-1
+  timestamp: number;
+  decision: string;
+  reasoning?: string;
+}
+
+export interface MarketConditions {
+  volatility: number;
+  liquidityDepth: number;
+  spreadBps: number;
+  mevRisk: 'low' | 'medium' | 'high';
+  optimalExecutionWindow: number; // seconds
+}
+
+// ============================================================================
+// Error Types
+// ============================================================================
+
+export enum ErrorCode {
+  // Quote Errors (1xxx)
+  INSUFFICIENT_LIQUIDITY = 'E1001',
+  QUOTE_EXPIRED = 'E1002',
+  INVALID_TOKEN_PAIR = 'E1003',
+  AMOUNT_TOO_SMALL = 'E1004',
+  AMOUNT_TOO_LARGE = 'E1005',
+  
+  // Swap Errors (2xxx)
+  SLIPPAGE_EXCEEDED = 'E2001',
+  TRANSACTION_FAILED = 'E2002',
+  INSUFFICIENT_BALANCE = 'E2003',
+  INVALID_SIGNATURE = 'E2004',
+  
+  // Routing Errors (3xxx)
+  NO_ROUTE_FOUND = 'E3001',
+  ROUTE_VALIDATION_FAILED = 'E3002',
+  MAX_HOPS_EXCEEDED = 'E3003',
+  
+  // Agent Errors (4xxx)
+  AGENT_TIMEOUT = 'E4001',
+  AGENT_UNAVAILABLE = 'E4002',
+  AGENT_DECISION_FAILED = 'E4003',
+  
+  // System Errors (5xxx)
+  RPC_ERROR = 'E5001',
+  DATABASE_ERROR = 'E5002',
+  CACHE_ERROR = 'E5003',
+  RATE_LIMIT_EXCEEDED = 'E5004',
+}
+
+export class LiquidityFlowError extends Error {
+  constructor(
+    public code: ErrorCode,
+    public message: string,
+    public statusCode: number = 400,
+    public details?: any
+  ) {
+    super(message);
+    this.name = 'LiquidityFlowError';
+  }
+}
+
+// ============================================================================
+// Database Types
+// ============================================================================
+
+export interface TradeRecord {
+  id: string;
+  userAddress: string;
+  inputMint: string;
+  outputMint: string;
+  inputAmount: string;
+  outputAmount: string;
+  route: RouteSegment[];
+  dexFeesBps: number;
+  slippageBps: number;
+  mevProtected: boolean;
+  transactionHash: string;
+  status: 'pending' | 'confirmed' | 'failed';
+  createdAt: Date;
+  executedAt?: Date;
+}
+
+export interface LiquiditySnapshot {
+  id: string;
+  dex: string;
+  poolAddress: string;
+  tokenAMint: string;
+  tokenBMint: string;
+  liquidityA: string;
+  liquidityB: string;
+  price: number;
+  timestamp: Date;
+}
+
+// ============================================================================
+// Configuration Types
+// ============================================================================
+
+export interface AppConfig {
+  port: number;
+  nodeEnv: 'development' | 'production' | 'test';
+  logLevel: 'debug' | 'info' | 'warn' | 'error';
+  solana: {
+    rpcEndpoint: string;
+    commitment: 'processed' | 'confirmed' | 'finalized';
+    walletPrivateKey: string;
+  };
+  database: {
+    postgres: {
+      host: string;
+      port: number;
+      user: string;
+      password: string;
+      database: string;
+    };
+    redis: {
+      host: string;
+      port: number;
+    };
+  };
+  dex: {
+    jupiterApiUrl: string;
+    maxRetries: number;
+    timeoutMs: number;
+  };
+  agents: {
+    serverHost: string;
+    serverPort: number;
+    network: 'testnet' | 'mainnet';
+  };
+  rateLimit: {
+    windowMs: number;
+    maxRequests: number;
+  };
+}
+```
+
+---
+
+## Core Features to Build
+
+### 1. REST API Endpoints (Express.js)
+
+**GET `/api/quotes`**
+```typescript
+Query Params:
+  - inputMint: string (token mint address)
+  - outputMint: string
+  - amount: string (in lamports)
+  - slippage: number (0.1 = 0.1%)
+
+Response:
+{
+  success: true,
+  data: {
+    inputAmount: string,
+    outputAmount: string,
+    priceImpact: number,
+    routes: Array<{
+      dex: string,
+      percentage: number,
+      amountOut: string
+    }>,
+    estimatedGas: number,
+    timestamp: number,
+    quoteId: string,
+    mevProtected: boolean,
+    expiresAt: number
+  },
+  metadata: {
+    timestamp: number,
+    requestId: string,
+    serverVersion: string
+  }
+}
+```
+
+**POST `/api/swap`**
+```typescript
+Body:
+{
+  quoteId: string,
+  userPublicKey: string,
+  slippage: number,
+  useMevProtection: boolean,
+  priority: 'low' | 'medium' | 'high'
+}
+
+Response:
+{
+  success: true,
+  data: {
+    transactionHash: string,
+    status: 'pending' | 'confirmed',
+    inputAmount: string,
+    outputAmount: string,
+    actualPrice: string,
+    route: Array,
+    timestamp: number,
+    savings: {
+      bpsVsMarket: number,
+      mevProtectionBps: number
+    }
+  }
+}
+```
+
+**GET `/api/routes`**
+```typescript
+Query Params:
+  - inputMint: string
+  - outputMint: string
+  - amount: string
+
+Response:
+{
+  success: true,
+  data: {
+    routes: Array<{
+      legs: Array<{
+        dex: string,
+        inputMint: string,
+        outputMint: string,
+        percentage: number
+      }>,
+      totalOutputAmount: string,
+      efficiency: number (0-100%)
+    }>,
+    bestRoute: object,
+    alternativeRoutes: Array
+  }
+}
+```
+
+**POST `/api/agents/execute`**
+```typescript
+Body:
+{
+  agentType: 'marketAnalysis' | 'smartRouter' | 'autonomousMM' | 'mevHunter',
+  action: string,
+  params: object
+}
+
+Response:
+{
+  success: true,
+  data: {
+    agentId: string,
+    action: string,
+    result: object,
+    confidence: number,
+    timestamp: number,
+    decision: string,
+    reasoning: string
+  }
+}
+```
+
+**WS `/api/stream`**
+```typescript
+Subscribe:
+{
+  type: 'subscribe',
+  inputMint: string,
+  outputMint: string
+}
+
+Stream (every 500ms):
+{
+  inputMint: string,
+  outputMint: string,
+  rate: string,
+  timestamp: number,
+  source: 'Jupiter' | 'Orca' | 'Raydium' | 'Aggregated',
+  confidence: number,
+  mevRisk: 'low' | 'medium' | 'high'
+}
+```
+
+### 2. Smart Router Engine - Implementation Details
+
+**Pathfinding Algorithm (src/core/smartRouter/pathfinder.ts)**
+
+```typescript
+/**
+ * Multi-leg pathfinding using modified Dijkstra's algorithm
+ * 
+ * Algorithm:
+ * 1. Build adjacency list from all DEX pool data
+ * 2. Use priority queue with [cost, currentToken, path, outputAmount]
+ * 3. Edge weights = -log(1 - slippage) + gasFeesNormalized
+ * 4. Track best K paths (K=3) for each token pair
+ * 5. Prune paths exceeding maxHops (default: 5)
+ * 6. Return top 3 paths sorted by total output amount
+ * 
+ * Time Complexity: O((E + V) * log(V) * K) where K=max paths
+ * Space Complexity: O(V * K)
+ */
+
+interface PathNode {
+  token: string;
+  pool: LiquidityPool;
+  amountIn: string;
+  amountOut: string;
+  priceImpact: number;
+}
+
+interface Path {
+  nodes: PathNode[];
+  totalOutput: string;
+  totalPriceImpact: number;
+  totalGas: number;
+  score: number; // Higher is better
+}
+
+class PathFinder {
+  private liquidityGraph: Map<string, LiquidityPool[]>;
+  private maxHops: number = 5;
+  private maxPaths: number = 3;
+
+  /**
+   * Find optimal paths using modified Dijkstra
+   */
+  async findOptimalPaths(
+    inputToken: string,
+    outputToken: string,
+    inputAmount: string
+  ): Promise<Path[]> {
+    // 1. Initialize priority queue: [score, currentToken, path, remainingAmount]
+    const pq = new PriorityQueue<[number, string, PathNode[], string]>();
+    pq.push([0, inputToken, [], inputAmount]);
+    
+    // 2. Track visited states: Map<token, Set<pathHash>>
+    const visited = new Map<string, Set<string>>();
+    
+    // 3. Track best K paths
+    const completePaths: Path[] = [];
+    
+    while (!pq.isEmpty() && completePaths.length < this.maxPaths) {
+      const [currentScore, currentToken, currentPath, remainingAmount] = pq.pop();
+      
+      // Check if reached destination
+      if (currentToken === outputToken) {
+        completePaths.push(this.constructPath(currentPath, remainingAmount));
+        continue;
+      }
+      
+      // Check max hops
+      if (currentPath.length >= this.maxHops) continue;
+      
+      // Check if state already visited
+      const pathHash = this.hashPath(currentPath);
+      if (visited.get(currentToken)?.has(pathHash)) continue;
+      
+      // Mark as visited
+      if (!visited.has(currentToken)) visited.set(currentToken, new Set());
+      visited.get(currentToken)!.add(pathHash);
+      
+      // Explore neighbors
+      const pools = this.liquidityGraph.get(currentToken) || [];
+      for (const pool of pools) {
+        const nextToken = pool.tokenA.mint === currentToken 
+          ? pool.tokenB.mint 
+          : pool.tokenA.mint;
+        
+        // Calculate swap output and price impact
+        const { amountOut, priceImpact } = this.calculateSwap(
+          pool,
+          currentToken,
+          remainingAmount
+        );
+        
+        // Skip if slippage too high
+        if (priceImpact > 0.05) continue; // 5% max per hop
+        
+        // Calculate edge score
+        const edgeScore = this.calculateEdgeScore(pool, priceImpact, amountOut);
+        const newScore = currentScore + edgeScore;
+        
+        // Add to priority queue
+        const newPath = [...currentPath, {
+          token: nextToken,
+          pool,
+          amountIn: remainingAmount,
+          amountOut,
+          priceImpact
+        }];
+        
+        pq.push([newScore, nextToken, newPath, amountOut]);
+      }
+    }
+    
+    return completePaths.sort((a, b) => b.score - a.score);
+  }
+
+  /**
+   * Calculate swap output using constant product formula
+   * x * y = k
+   * amountOut = (amountIn * reserveOut) / (reserveIn + amountIn) * (1 - fee)
+   */
+  private calculateSwap(
+    pool: LiquidityPool,
+    inputToken: string,
+    inputAmount: string
+  ): { amountOut: string; priceImpact: number } {
+    const isTokenA = pool.tokenA.mint === inputToken;
+    const reserveIn = isTokenA ? pool.liquidityA : pool.liquidityB;
+    const reserveOut = isTokenA ? pool.liquidityB : pool.liquidityA;
+    
+    const amountInBN = new BN(inputAmount);
+    const reserveInBN = new BN(reserveIn);
+    const reserveOutBN = new BN(reserveOut);
+    const feeBps = new BN(pool.fee);
+    
+    // Apply fee: amountIn * (10000 - feeBps) / 10000
+    const amountInWithFee = amountInBN
+      .mul(new BN(10000).sub(feeBps))
+      .div(new BN(10000));
+    
+    // Calculate output: (amountIn * reserveOut) / (reserveIn + amountIn)
+    const numerator = amountInWithFee.mul(reserveOutBN);
+    const denominator = reserveInBN.add(amountInWithFee);
+    const amountOutBN = numerator.div(denominator);
+    
+    // Calculate price impact
+    // priceImpact = 1 - (actualPrice / marketPrice)
+    // marketPrice = reserveOut / reserveIn
+    // actualPrice = amountOut / amountIn
+    const marketPrice = reserveOutBN.mul(new BN(1e9)).div(reserveInBN);
+    const actualPrice = amountOutBN.mul(new BN(1e9)).div(amountInBN);
+    const priceImpact = 1 - (actualPrice.toNumber() / marketPrice.toNumber());
+    
+    return {
+      amountOut: amountOutBN.toString(),
+      priceImpact: Math.max(0, priceImpact)
+    };
+  }
+
+  /**
+   * Calculate edge score for pathfinding
+   * Higher score = better path
+   * Score = outputAmount * (1 - priceImpact) * liquidityDepthFactor - gasCost
+   */
+  private calculateEdgeScore(
+    pool: LiquidityPool,
+    priceImpact: number,
+    amountOut: string
+  ): number {
+    const outputValue = parseFloat(amountOut);
+    const liquidityFactor = Math.min(pool.tvl / 1000000, 1); // Normalize to 0-1
+    const gasCostNormalized = 5000 / outputValue; // Assume 5000 lamports gas
+    
+    return outputValue * (1 - priceImpact) * liquidityFactor - gasCostNormalized;
+  }
+
+  /**
+   * Hash path for visited state tracking
+   */
+  private hashPath(path: PathNode[]): string {
+    return path.map(n => `${n.pool.address}-${n.token}`).join('|');
+  }
+
+  /**
+   * Construct final path object
+   */
+  private constructPath(nodes: PathNode[], finalAmount: string): Path {
+    const totalPriceImpact = nodes.reduce((sum, n) => sum + n.priceImpact, 0);
+    const totalGas = nodes.length * 5000; // Estimate 5000 lamports per hop
+    const score = parseFloat(finalAmount) * (1 - totalPriceImpact);
+    
+    return {
+      nodes,
+      totalOutput: finalAmount,
+      totalPriceImpact,
+      totalGas,
+      score
+    };
+  }
+}
+```
+
+**Slippage Calculation (src/core/smartRouter/slippageCalc.ts)**
+
+```typescript
+/**
+ * Advanced slippage calculation considering:
+ * 1. Pool depth relative to trade size
+ * 2. Recent volatility
+ * 3. Time-of-day liquidity patterns
+ * 4. Historical execution data
+ */
+
+interface SlippageEstimate {
+  minSlippage: number; // Best case (bps)
+  expectedSlippage: number; // Most likely (bps)
+  maxSlippage: number; // Worst case (bps)
+  confidence: number; // 0-1
+}
+
+class SlippageCalculator {
+  /**
+   * Calculate expected slippage for a swap
+   * 
+   * Formula:
+   * baseSlippage = (amountIn / poolLiquidity) * 10000 // in bps
+   * volatilityMultiplier = 1 + (currentVolatility / avgVolatility)
+   * timeMultiplier = 1 + (isLowLiquidityHour ? 0.2 : 0)
+   * expectedSlippage = baseSlippage * volatilityMultiplier * timeMultiplier
+   */
+  async calculateSlippage(
+    pool: LiquidityPool,
+    amountIn: string,
+    historicalData?: any
+  ): Promise<SlippageEstimate> {
+    // 1. Base slippage from pool depth
+    const baseSlippage = this.calculateBaseSlippage(pool, amountIn);
+    
+    // 2. Volatility adjustment
+    const volatilityMultiplier = await this.getVolatilityMultiplier(pool);
+    
+    // 3. Time-of-day adjustment
+    const timeMultiplier = this.getTimeLiquidityMultiplier();
+    
+    // 4. Calculate expected slippage
+    const expectedSlippage = baseSlippage * volatilityMultiplier * timeMultiplier;
+    
+    // 5. Calculate confidence based on data quality
+    const confidence = this.calculateConfidence(pool, historicalData);
+    
+    // 6. Calculate min/max range (±30% from expected)
+    const minSlippage = expectedSlippage * 0.7;
+    const maxSlippage = expectedSlippage * 1.3;
+    
+    return {
+      minSlippage,
+      expectedSlippage,
+      maxSlippage,
+      confidence
+    };
+  }
+
+  private calculateBaseSlippage(pool: LiquidityPool, amountIn: string): number {
+    const poolLiquidity = parseFloat(pool.liquidityA);
+    const tradeSize = parseFloat(amountIn);
+    
+    // Slippage ≈ (tradeSize / liquidity)² for constant product AMM
+    const ratio = tradeSize / poolLiquidity;
+    return ratio * ratio * 10000; // Convert to bps
+  }
+
+  private async getVolatilityMultiplier(pool: LiquidityPool): Promise<number> {
+    // Query last 24h price changes from Switchboard
+    const recentVolatility = await this.fetchRecentVolatility(pool);
+    const avgVolatility = 0.02; // 2% baseline
+    
+    return 1 + (recentVolatility / avgVolatility);
+  }
+
+  private getTimeLiquidityMultiplier(): number {
+    const hour = new Date().getUTCHours();
+    // Low liquidity hours: 0-8 UTC (Asian evening)
+    const isLowLiquidityHour = hour >= 0 && hour <= 8;
+    return isLowLiquidityHour ? 1.2 : 1.0;
+  }
+
+  private calculateConfidence(pool: LiquidityPool, historicalData?: any): number {
+    let confidence = 0.5; // Base confidence
+    
+    // Higher TVL = higher confidence
+    if (pool.tvl > 1000000) confidence += 0.2;
+    if (pool.tvl > 10000000) confidence += 0.1;
+    
+    // Higher volume = higher confidence
+    if (pool.volume24h > pool.tvl * 0.5) confidence += 0.1;
+    
+    // Historical data available = higher confidence
+    if (historicalData?.samples > 100) confidence += 0.1;
+    
+    return Math.min(confidence, 1.0);
+  }
+}
+```
+
+**Price Optimizer (src/core/smartRouter/priceOptimizer.ts)**
+
+```typescript
+/**
+ * Dynamic fee optimization based on market conditions
+ * Adjusts protocol fees to maximize competitiveness while maintaining profitability
+ */
+
+interface OptimizedPricing {
+  baseFee: number; // bps
+  priorityFee: number; // bps
+  totalFee: number; // bps
+  reasoning: string;
+}
+
+class PriceOptimizer {
+  /**
+   * Calculate optimal fees based on:
+   * - Current market volatility
+   * - Liquidity depth
+   * - Time of day
+   * - User priority level
+   * - Competition (Jupiter/Orca fees)
+   */
+  async optimizeFees(
+    tradeSize: string,
+    volatility: number,
+    liquidityDepth: number,
+    priority: 'low' | 'medium' | 'high'
+  ): Promise<OptimizedPricing> {
+    // Base fee: 0.05% - 0.3% depending on conditions
+    let baseFee = 5; // 5 bps = 0.05%
+    
+    // Increase fee during high volatility (risk premium)
+    if (volatility > 0.05) baseFee += 10; // +0.1%
+    if (volatility > 0.10) baseFee += 10; // +0.1%
+    
+    // Decrease fee for large trades (volume incentive)
+    const tradeSizeUSD = parseFloat(tradeSize) * 100; // Assume $100 SOL
+    if (tradeSizeUSD > 10000) baseFee -= 2; // -0.02%
+    if (tradeSizeUSD > 100000) baseFee -= 3; // -0.03%
+    
+    // Adjust for liquidity depth
+    if (liquidityDepth < 100000) baseFee += 5; // +0.05% for low liquidity
+    
+    // Priority fee adjustment
+    const priorityFeeMap = {
+      low: 0,
+      medium: 5,
+      high: 10
+    };
+    const priorityFee = priorityFeeMap[priority];
+    
+    // Total fee (max 0.5%)
+    const totalFee = Math.min(baseFee + priorityFee, 50);
+    
+    // Generate reasoning
+    const reasoning = this.generateReasoning(baseFee, priorityFee, volatility);
+    
+    return {
+      baseFee,
+      priorityFee,
+      totalFee,
+      reasoning
+    };
+  }
+
+  private generateReasoning(
+    baseFee: number,
+    priorityFee: number,
+    volatility: number
+  ): string {
+    const parts = [];
+    parts.push(`Base fee: ${baseFee}bps`);
+    if (volatility > 0.05) parts.push('increased due to high volatility');
+    if (priorityFee > 0) parts.push(`priority fee: ${priorityFee}bps`);
+    return parts.join(', ');
+  }
+}
+```
+
+### 3. DEX Aggregation Layer - Complete Implementation
+
+**Jupiter Client (src/core/dexAggregator/jupiterClient.ts)**
+
+```typescript
+import axios from 'axios';
+import { SwapQuote, RouteSegment } from '../../types';
+
+/**
+ * Jupiter API v6 Integration
+ * Docs: https://station.jup.ag/docs/apis/swap-api
+ */
+
+export class JupiterClient {
+  private baseUrl: string;
+  private cache: Map<string, { data: any; timestamp: number }>;
+  private cacheTTL = 30000; // 30 seconds
+
+  constructor(baseUrl: string = 'https://quote-api.jup.ag/v6') {
+    this.baseUrl = baseUrl;
+    this.cache = new Map();
+  }
+
+  /**
+   * Get best quote from Jupiter
+   */
+  async getQuote(
+    inputMint: string,
+    outputMint: string,
+    amount: string,
+    slippageBps: number = 50
+  ): Promise<SwapQuote | null> {
+    const cacheKey = `${inputMint}-${outputMint}-${amount}`;
+    const cached = this.getCached(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const response = await axios.get(`${this.baseUrl}/quote`, {
+        params: {
+          inputMint,
+          outputMint,
+          amount,
+          slippageBps,
+          onlyDirectRoutes: false,
+          asLegacyTransaction: false
+        },
+        timeout: 5000
+      });
+
+      const quote = this.parseJupiterQuote(response.data);
+      this.setCache(cacheKey, quote);
+      return quote;
+    } catch (error) {
+      console.error('Jupiter quote failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Parse Jupiter API response to our internal format
+   */
+  private parseJupiterQuote(data: any): SwapQuote {
+    const routes: RouteSegment[] = data.routePlan?.map((step: any) => ({
+      dex: 'Jupiter',
+      percentage: 100 / data.routePlan.length,
+      amountOut: step.swapInfo.outAmount,
+      poolAddress: step.swapInfo.ammKey,
+      priceImpact: parseFloat(step.swapInfo.priceImpactPct || 0)
+    })) || [];
+
+    return {
+      inputAmount: data.inAmount,
+      outputAmount: data.outAmount,
+      priceImpact: parseFloat(data.priceImpactPct || 0),
+      routes,
+      estimatedGas: 5000, // Estimate
+      timestamp: Date.now(),
+      quoteId: `jup-${Date.now()}`,
+      mevProtected: false,
+      expiresAt: Date.now() + 30000
+    };
+  }
+
+  private getCached(key: string): SwapQuote | null {
+    const cached = this.cache.get(key);
+    if (!cached) return null;
+    
+    if (Date.now() - cached.timestamp > this.cacheTTL) {
+      this.cache.delete(key);
+      return null;
+    }
+    
+    return cached.data;
+  }
+
+  private setCache(key: string, data: SwapQuote): void {
+    this.cache.set(key, { data, timestamp: Date.now() });
+  }
+}
+```
+
+**Orca Client (src/core/dexAggregator/orcaClient.ts)**
+
+```typescript
+import { WhirlpoolContext, buildWhirlpoolClient, ORCA_WHIRLPOOL_PROGRAM_ID } from '@orca-so/whirlpools-sdk';
+import { Connection, PublicKey } from '@solana/web3.js';
+import { SwapQuote } from '../../types';
+
+/**
+ * Orca Whirlpool SDK Integration
+ * Docs: https://orca-so.gitbook.io/orca-developer-portal
+ */
+
+export class OrcaClient {
+  private connection: Connection;
+  private ctx: WhirlpoolContext;
+
+  constructor(rpcEndpoint: string) {
+    this.connection = new Connection(rpcEndpoint, 'confirmed');
+    // Initialize Whirlpool context (requires AnchorProvider)
+  }
+
+  /**
+   * Get quote from Orca concentrated liquidity pools
+   */
+  async getQuote(
+    inputMint: string,
+    outputMint: string,
+    amount: string
+  ): Promise<SwapQuote | null> {
+    try {
+      // Find whirlpool for token pair
+      const whirlpoolPda = await this.findWhirlpool(inputMint, outputMint);
+      if (!whirlpoolPda) return null;
+
+      // Fetch whirlpool data
+      const whirlpool = await this.fetchWhirlpoolData(whirlpoolPda);
+      
+      // Calculate swap output using tick-based pricing
+      const outputAmount = this.calculateWhirlpoolSwap(whirlpool, amount);
+      
+      // Calculate price impact
+      const priceImpact = this.calculatePriceImpact(whirlpool, amount, outputAmount);
+
+      return {
+        inputAmount: amount,
+        outputAmount,
+        priceImpact,
+        routes: [{
+          dex: 'Orca',
+          percentage: 100,
+          amountOut: outputAmount,
+          poolAddress: whirlpoolPda.toString(),
+          priceImpact
+        }],
+        estimatedGas: 4500,
+        timestamp: Date.now(),
+        quoteId: `orca-${Date.now()}`,
+        mevProtected: false,
+        expiresAt: Date.now() + 30000
+      };
+    } catch (error) {
+      console.error('Orca quote failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Find whirlpool address for token pair
+   */
+  private async findWhirlpool(
+    tokenA: string,
+    tokenB: string
+  ): Promise<PublicKey | null> {
+    // Implementation: Query Orca's whirlpool registry
+    // This would use Orca SDK's pool discovery methods
+    return null; // Placeholder
+  }
+
+  private async fetchWhirlpoolData(address: PublicKey): Promise<any> {
+    // Fetch on-chain whirlpool account data
+    return null; // Placeholder
+  }
+
+  private calculateWhirlpoolSwap(pool: any, amountIn: string): string {
+    // Concentrated liquidity math (tick-based)
+    // More complex than constant product
+    return '0'; // Placeholder
+  }
+
+  private calculatePriceImpact(pool: any, amountIn: string, amountOut: string): number {
+    return 0; // Placeholder
+  }
+}
+```
+
+**Raydium Client (src/core/dexAggregator/raydiumClient.ts)**
+
+```typescript
+import { Connection, PublicKey } from '@solana/web3.js';
+import { Liquidity, LiquidityPoolKeys, Token, TokenAmount } from '@raydium-io/raydium-sdk';
+import { SwapQuote } from '../../types';
+
+/**
+ * Raydium SDK Integration
+ * Docs: https://docs.raydium.io/raydium/
+ */
+
+export class RaydiumClient {
+  private connection: Connection;
+
+  constructor(rpcEndpoint: string) {
+    this.connection = new Connection(rpcEndpoint, 'confirmed');
+  }
+
+  /**
+   * Get quote from Raydium AMM pools
+   */
+  async getQuote(
+    inputMint: string,
+    outputMint: string,
+    amount: string
+  ): Promise<SwapQuote | null> {
+    try {
+      // Find pool for token pair
+      const poolKeys = await this.findPoolKeys(inputMint, outputMint);
+      if (!poolKeys) return null;
+
+      // Fetch pool info
+      const poolInfo = await Liquidity.fetchInfo({
+        connection: this.connection,
+        poolKeys
+      });
+
+      // Calculate swap output
+      const amountIn = new TokenAmount(new Token(inputMint, poolInfo.baseDecimals), amount);
+      const { amountOut, priceImpact } = Liquidity.computeAmountOut({
+        poolKeys,
+        poolInfo,
+        amountIn,
+        currencyOut: new Token(outputMint, poolInfo.quoteDecimals),
+        slippage: 0.005 // 0.5%
+      });
+
+      return {
+        inputAmount: amount,
+        outputAmount: amountOut.toFixed(),
+        priceImpact: priceImpact.toNumber(),
+        routes: [{
+          dex: 'Raydium',
+          percentage: 100,
+          amountOut: amountOut.toFixed(),
+          poolAddress: poolKeys.id.toString(),
+          priceImpact: priceImpact.toNumber()
+        }],
+        estimatedGas: 4800,
+        timestamp: Date.now(),
+        quoteId: `ray-${Date.now()}`,
+        mevProtected: false,
+        expiresAt: Date.now() + 30000
+      };
+    } catch (error) {
+      console.error('Raydium quote failed:', error);
+      return null;
+    }
+  }
+
+  private async findPoolKeys(tokenA: string, tokenB: string): Promise<LiquidityPoolKeys | null> {
+    // Query Raydium's pool registry
+    // This would fetch from Raydium's API or on-chain data
+    return null; // Placeholder
+  }
+}
+```
+
+### 4. Fetch.ai Agent Implementation (Python)
+
+**Market Analysis Agent (agents/market_analysis_agent.py)**
+
+```python
+from uagents import Agent, Context, Protocol, Model
+from typing import Dict, List
+import asyncio
+import aiohttp
+from datetime import datetime
+
+# Message models
+class LiquidityRequest(Model):
+    token_pair: str
+    amount: float
+
+class LiquidityResponse(Model):
+    token_pair: str
+    liquidity_depth: float
+    spread_bps: float
+    volatility: float
+    mev_risk: str
+    optimal_window: int
+    confidence: float
+    timestamp: int
+
+# Create agent
+market_agent = Agent(
+    name="market_analysis_agent",
+    seed="market_analysis_seed_phrase_change_in_production",
+    port=8001,
+    endpoint=["http://localhost:8001/submit"]
+)
+
+# Agent state
+class MarketState:
+    def __init__(self):
+        self.liquidity_cache: Dict[str, any] = {}
+        self.price_history: Dict[str, List[float]] = {}
+        self.volatility_cache: Dict[str, float] = {}
+
+state = MarketState()
+
+# Protocols
+market_protocol = Protocol("MarketAnalysis")
+
+@market_protocol.on_message(model=LiquidityRequest)
+async def handle_liquidity_request(ctx: Context, sender: str, msg: LiquidityRequest):
+    """
+    Analyze market conditions for a token pair
+    
+    Steps:
+    1. Fetch liquidity depth from all DEXes
+    2. Calculate spread across venues
+    3. Estimate volatility from recent price changes
+    4. Detect MEV risk based on mempool analysis
+    5. Recommend optimal execution window
+    """
+    ctx.logger.info(f"Analyzing liquidity for {msg.token_pair}")
+    
+    # 1. Fetch current liquidity
+    liquidity_depth = await fetch_total_liquidity(msg.token_pair)
+    
+    # 2. Calculate spread
+    spread_bps = await calculate_spread(msg.token_pair)
+    
+    # 3. Calculate volatility
+    volatility = calculate_volatility(msg.token_pair, state.price_history)
+    
+    # 4. Assess MEV risk
+    mev_risk = assess_mev_risk(msg.amount, liquidity_depth, volatility)
+    
+    # 5. Determine optimal execution window
+    optimal_window = determine_execution_window(volatility, spread_bps)
+    
+    # 6. Calculate confidence
+    confidence = calculate_analysis_confidence(liquidity_depth, len(state.price_history.get(msg.token_pair, [])))
+    
+    # Send response
+    response = LiquidityResponse(
+        token_pair=msg.token_pair,
+        liquidity_depth=liquidity_depth,
+        spread_bps=spread_bps,
+        volatility=volatility,
+        mev_risk=mev_risk,
+        optimal_window=optimal_window,
+        confidence=confidence,
+        timestamp=int(datetime.now().timestamp())
+    )
+    
+    await ctx.send(sender, response)
+    ctx.logger.info(f"Analysis complete: {mev_risk} MEV risk, {optimal_window}s window")
+
+@market_agent.on_interval(period=2.0)
+async def monitor_liquidity(ctx: Context):
+    """
+    Continuously monitor liquidity across all major pairs
+    Updates internal state every 2 seconds
+    """
+    major_pairs = [
+        "SOL/USDC",
+        "SOL/USDT",
+        "BONK/SOL",
+        # Add more pairs
+    ]
+    
+    for pair in major_pairs:
+        try:
+            # Fetch latest data
+            liquidity = await fetch_total_liquidity(pair)
+            price = await fetch_current_price(pair)
+            
+            # Update cache
+            state.liquidity_cache[pair] = {
+                'liquidity': liquidity,
+                'timestamp': datetime.now()
+            }
+            
+            # Update price history (keep last 100 data points)
+            if pair not in state.price_history:
+                state.price_history[pair] = []
+            state.price_history[pair].append(price)
+            if len(state.price_history[pair]) > 100:
+                state.price_history[pair].pop(0)
+            
+            # Calculate and cache volatility
+            state.volatility_cache[pair] = calculate_volatility(pair, state.price_history)
+            
+        except Exception as e:
+            ctx.logger.error(f"Error monitoring {pair}: {e}")
+
+# Helper functions
+async def fetch_total_liquidity(token_pair: str) -> float:
+    """Aggregate liquidity across Jupiter, Orca, Raydium"""
+    # Implementation: Query each DEX API
+    return 1000000.0  # Placeholder
+
+async def calculate_spread(token_pair: str) -> float:
+    """Calculate bid-ask spread across venues"""
+    # Implementation: Fetch best bid/ask from each DEX
+    return 5.0  # Placeholder (5 bps)
+
+def calculate_volatility(token_pair: str, price_history: Dict[str, List[float]]) -> float:
+    """
+    Calculate historical volatility using standard deviation
+    volatility = stddev(returns) * sqrt(periods_per_day)
+    """
+    prices = price_history.get(token_pair, [])
+    if len(prices) < 2:
+        return 0.02  # Default 2%
+    
+    # Calculate returns
+    returns = [(prices[i] - prices[i-1]) / prices[i-1] for i in range(1, len(prices))]
+    
+    # Calculate standard deviation
+    mean_return = sum(returns) / len(returns)
+    variance = sum((r - mean_return) ** 2 for r in returns) / len(returns)
+    stddev = variance ** 0.5
+    
+    # Annualize (assuming 2-second intervals, 43200 periods per day)
+    volatility = stddev * (43200 ** 0.5)
+    
+    return volatility
+
+def assess_mev_risk(amount: float, liquidity: float, volatility: float) -> str:
+    """
+    Assess MEV sandwich attack risk
+    
+    Risk factors:
+    - Trade size relative to liquidity
+    - Current volatility
+    - Time of day
+    """
+    trade_ratio = amount / liquidity
+    
+    if trade_ratio > 0.05 or volatility > 0.10:
+        return "high"
+    elif trade_ratio > 0.01 or volatility > 0.05:
+        return "medium"
+    else:
+        return "low"
+
+def determine_execution_window(volatility: float, spread_bps: float) -> int:
+    """
+    Recommend optimal execution window in seconds
+    Higher volatility = shorter window
+    """
+    if volatility > 0.10:
+        return 5  # Execute immediately
+    elif volatility > 0.05:
+        return 15
+    else:
+        return 30
+
+def calculate_analysis_confidence(liquidity: float, history_length: int) -> float:
+    """Calculate confidence in analysis based on data quality"""
+    confidence = 0.5
+    
+    if liquidity > 1000000:
+        confidence += 0.2
+    if history_length > 50:
+        confidence += 0.2
+    if history_length > 90:
+        confidence += 0.1
+    
+    return min(confidence, 1.0)
+
+async def fetch_current_price(token_pair: str) -> float:
+    """Fetch current price from oracle or DEX"""
+    return 100.0  # Placeholder
+
+# Register protocol
+market_agent.include(market_protocol)
+
+if __name__ == "__main__":
+    market_agent.run()
+```
+
+**Smart Router Agent (agents/smart_router_agent.py)**
+
+```python
+from uagents import Agent, Context, Protocol, Model
+from typing import List, Dict
+import grpc
+from concurrent import futures
+
+# Message models
+class RouteRequest(Model):
+    input_token: str
+    output_token: str
+    amount: float
+    user_slippage: float
+    mev_protection: bool
+
+class RouteResponse(Model):
+    route_legs: List[Dict]
+    expected_output: float
+    price_impact: float
+    estimated_gas: int
+    mev_protected: bool
+    confidence: float
+    reasoning: str
+
+# Create agent
+router_agent = Agent(
+    name="smart_router_agent",
+    seed="smart_router_seed_phrase_change_in_production",
+    port=8002,
+    endpoint=["http://localhost:8002/submit"]
+)
+
+# Agent state
+class RouterState:
+    def __init__(self):
+        self.route_cache: Dict[str, any] = {}
+        self.performance_history: List[Dict] = []
+
+state = RouterState()
+
+# Protocol
+router_protocol = Protocol("SmartRouting")
+
+@router_protocol.on_message(model=RouteRequest)
+async def handle_route_request(ctx: Context, sender: str, msg: RouteRequest):
+    """
+    Determine optimal swap route
+    
+    Steps:
+    1. Query Market Analysis Agent for conditions
+    2. Fetch available routes from DEX aggregators
+    3. Score routes based on output, gas, and MEV risk
+    4. Select best route
+    5. Apply MEV protection if needed
+    """
+    ctx.logger.info(f"Routing {msg.amount} {msg.input_token} -> {msg.output_token}")
+    
+    # 1. Get market conditions
+    market_conditions = await query_market_agent(ctx, f"{msg.input_token}/{msg.output_token}", msg.amount)
+    
+    # 2. Fetch available routes
+    routes = await fetch_all_routes(msg.input_token, msg.output_token, msg.amount)
+    
+    # 3. Score routes
+    scored_routes = score_routes(routes, market_conditions, msg.mev_protection)
+    
+    # 4. Select best route
+    best_route = scored_routes[0] if scored_routes else None
+    
+    if not best_route:
+        ctx.logger.error("No valid route found")
+        return
+    
+    # 5. Apply MEV protection logic
+    if msg.mev_protection and market_conditions['mev_risk'] in ['medium', 'high']:
+        best_route = apply_mev_protection(best_route)
+    
+    # 6. Generate reasoning
+    reasoning = generate_routing_reasoning(best_route, market_conditions)
+    
+    # Send response
+    response = RouteResponse(
+        route_legs=best_route['legs'],
+        expected_output=best_route['output'],
+        price_impact=best_route['price_impact'],
+        estimated_gas=best_route['gas'],
+        mev_protected=best_route.get('mev_protected', False),
+        confidence=best_route['confidence'],
+        reasoning=reasoning
+    )
+    
+    await ctx.send(sender, response)
+    
+    # Store for learning
+    state.performance_history.append({
+        'request': msg.dict(),
+        'response': response.dict(),
+        'timestamp': datetime.now()
+    })
+
+async def query_market_agent(ctx: Context, token_pair: str, amount: float) -> Dict:
+    """Query Market Analysis Agent for current conditions"""
+    # Send message to market agent and wait for response
+    # Implementation would use uAgents messaging
+    return {
+        'liquidity_depth': 1000000,
+        'volatility': 0.03,
+        'mev_risk': 'low',
+        'spread_bps': 5
+    }
+
+async def fetch_all_routes(input_token: str, output_token: str, amount: float) -> List[Dict]:
+    """Fetch routes from Jupiter, Orca, Raydium"""
+    # Implementation: Call each DEX's API
+    return []  # Placeholder
+
+def score_routes(routes: List[Dict], market_conditions: Dict, mev_protection: bool) -> List[Dict]:
+    """
+    Score routes based on:
+    - Expected output amount (40%)
+    - Price impact (25%)
+    - Gas costs (15%)
+    - MEV risk (20%)
+    """
+    scored = []
+    
+    for route in routes:
+        score = 0.0
+        
+        # Output amount (normalized to 0-1)
+        max_output = max(r['output'] for r in routes)
+        output_score = route['output'] / max_output
+        score += output_score * 0.4
+        
+        # Price impact (inverted - lower is better)
+        price_impact_score = 1 - min(route['price_impact'], 0.1) / 0.1
+        score += price_impact_score * 0.25
+        
+        # Gas costs (inverted - lower is better)
+        max_gas = max(r['gas'] for r in routes)
+        gas_score = 1 - (route['gas'] / max_gas)
+        score += gas_score * 0.15
+        
+        # MEV risk
+        if mev_protection and market_conditions['mev_risk'] == 'high':
+            mev_score = 1.0 if route.get('supports_private_tx', False) else 0.5
+            score += mev_score * 0.2
+        else:
+            score += 0.2
+        
+        route['score'] = score
+        route['confidence'] = calculate_route_confidence(route, market_conditions)
+        scored.append(route)
+    
+    return sorted(scored, key=lambda r: r['score'], reverse=True)
+
+def calculate_route_confidence(route: Dict, market_conditions: Dict) -> float:
+    """Calculate confidence in route execution"""
+    confidence = 0.7  # Base confidence
+    
+    # Higher liquidity = higher confidence
+    if market_conditions['liquidity_depth'] > 1000000:
+        confidence += 0.1
+    
+    # Lower volatility = higher confidence
+    if market_conditions['volatility'] < 0.05:
+        confidence += 0.1
+    
+    # Single-leg routes = higher confidence
+    if len(route.get('legs', [])) == 1:
+        confidence += 0.1
+    
+    return min(confidence, 1.0)
+
+def apply_mev_protection(route: Dict) -> Dict:
+    """Apply MEV protection strategies to route"""
+    route['mev_protected'] = True
+    route['execution_strategy'] = 'private_mempool'
+    route['randomized_timing'] = True
+    return route
+
+def generate_routing_reasoning(route: Dict, market_conditions: Dict) -> str:
+    """Generate human-readable explanation of routing decision"""
+    parts = []
+    
+    parts.append(f"Selected {len(route['legs'])}-leg route")
+    parts.append(f"via {', '.join([leg['dex'] for leg in route['legs']])}")
+    parts.append(f"Expected output: {route['output']:.6f}")
+    parts.append(f"Price impact: {route['price_impact']*100:.2f}%")
+    
+    if route.get('mev_protected'):
+        parts.append("MEV protection enabled due to " + market_conditions['mev_risk'] + " risk")
+    
+    return ". ".join(parts)
+
+router_agent.include(router_protocol)
+
+if __name__ == "__main__":
+    router_agent.run()
+```
+
+**MEV Hunter Agent (agents/mev_hunter_agent.py)**
+
+```python
+from uagents import Agent, Context, Protocol, Model
+from typing import List, Dict
+from datetime import datetime, timedelta
+import asyncio
+
+# Message models
+class MEVCheckRequest(Model):
+    transaction_data: Dict
+    token_pair: str
+    amount: float
+
+class MEVCheckResponse(Model):
+    risk_level: str  # 'low', 'medium', 'high'
+    sandwich_detected: bool
+    frontrun_detected: bool
+    recommended_protection: str
+    confidence: float
+
+# Create agent
+mev_agent = Agent(
+    name="mev_hunter_agent",
+    seed="mev_hunter_seed_phrase_change_in_production",
+    port=8004,
+    endpoint=["http://localhost:8004/submit"]
+)
+
+# Agent state
+class MEVState:
+    def __init__(self):
+        self.mempool_cache: List[Dict] = []
+        self.detected_attacks: List[Dict] = []
+        self.protection_stats: Dict[str, int] = {
+            'prevented_sandwiches': 0,
+            'prevented_frontruns': 0,
+            'total_savings_usd': 0
+        }
+
+state = MEVState()
+
+# Protocol
+mev_protocol = Protocol("MEVHunting")
+
+@mev_protocol.on_message(model=MEVCheckRequest)
+async def handle_mev_check(ctx: Context, sender: str, msg: MEVCheckRequest):
+    """
+    Analyze transaction for MEV vulnerabilities
+    
+    Detection strategies:
+    1. Sandwich attacks: Look for large trades before/after
+    2. Front-running: Detect similar pending transactions
+    3. Back-running: Identify arbitrage opportunities
+    """
+    ctx.logger.info(f"Checking MEV risk for {msg.token_pair} trade")
+    
+    # 1. Check for sandwich attack patterns
+    sandwich_risk = await detect_sandwich_attack(msg.token_pair, msg.amount)
+    
+    # 2. Check for front-running patterns
+    frontrun_risk = await detect_frontrunning(msg.transaction_data)
+    
+    # 3. Determine overall risk level
+    risk_level = determine_mev_risk_level(sandwich_risk, frontrun_risk)
+    
+    # 4. Recommend protection strategy
+    protection = recommend_protection_strategy(risk_level, msg.amount)
+    
+    # 5. Calculate confidence
+    confidence = calculate_mev_confidence(len(state.mempool_cache))
+    
+    # Send response
+    response = MEVCheckResponse(
+        risk_level=risk_level,
+        sandwich_detected=sandwich_risk > 0.7,
+        frontrun_detected=frontrun_risk > 0.7,
+        recommended_protection=protection,
+        confidence=confidence
+    )
+    
+    await ctx.send(sender, response)
+    
+    # Log detection
+    if sandwich_risk > 0.7 or frontrun_risk > 0.7:
+        state.detected_attacks.append({
+            'type': 'sandwich' if sandwich_risk > frontrun_risk else 'frontrun',
+            'timestamp': datetime.now(),
+            'token_pair': msg.token_pair,
+            'amount': msg.amount
+        })
+
+@mev_agent.on_interval(period=1.0)
+async def monitor_mempool(ctx: Context):
+    """
+    Monitor mempool for suspicious patterns
+    Runs every second to catch fast-moving MEV bots
+    """
+    try:
+        # Fetch recent pending transactions
+        pending_txs = await fetch_mempool_transactions()
+        
+        # Update cache (keep last 100 transactions)
+        state.mempool_cache.extend(pending_txs)
+        if len(state.mempool_cache) > 100:
+            state.mempool_cache = state.mempool_cache[-100:]
+        
+        # Analyze patterns
+        suspicious_patterns = analyze_mempool_patterns(state.mempool_cache)
+        
+        if suspicious_patterns:
+            ctx.logger.warning(f"Detected {len(suspicious_patterns)} suspicious patterns")
+            
+    except Exception as e:
+        ctx.logger.error(f"Mempool monitoring error: {e}")
+
+# Helper functions
+async def detect_sandwich_attack(token_pair: str, amount: float) -> float:
+    """
+    Detect sandwich attack likelihood
+    
+    Sandwich pattern:
+    1. Large buy before user's transaction (frontrun)
+    2. User's transaction executes at worse price
+    3. Large sell after user's transaction (backrun)
+    
+    Returns: Risk score 0-1
+    """
+    risk = 0.0
+    
+    # Check for large pending buys
+    recent_txs = [tx for tx in state.mempool_cache 
+                  if tx.get('token_pair') == token_pair 
+                  and tx.get('timestamp', 0) > (datetime.now() - timedelta(seconds=5)).timestamp()]
+    
+    large_buys = [tx for tx in recent_txs if tx.get('type') == 'buy' and tx.get('amount', 0) > amount * 2]
+    
+    if large_buys:
+        risk += 0.5
+    
+    # Check if trade size makes user vulnerable
+    if amount > 10000:  # Large trade in USD
+        risk += 0.3
+    
+    return min(risk, 1.0)
+
+async def detect_frontrunning(transaction_data: Dict) -> float:
+    """
+    Detect front-running likelihood
+    
+    Front-run pattern:
+    - Similar transaction already in mempool with higher gas
+    
+    Returns: Risk score 0-1
+    """
+    risk = 0.0
+    
+    # Check for similar pending transactions with higher priority
+    similar_txs = [tx for tx in state.mempool_cache 
+                   if tx.get('token_pair') == transaction_data.get('token_pair')
+                   and tx.get('priority_fee', 0) > transaction_data.get('priority_fee', 0)]
+    
+    if similar_txs:
+        risk += 0.6
+    
+    return min(risk, 1.0)
+
+def determine_mev_risk_level(sandwich_risk: float, frontrun_risk: float) -> str:
+    """Determine overall MEV risk level"""
+    max_risk = max(sandwich_risk, frontrun_risk)
+    
+    if max_risk > 0.7:
+        return 'high'
+    elif max_risk > 0.4:
+        return 'medium'
+    else:
+        return 'low'
+
+def recommend_protection_strategy(risk_level: str, amount: float) -> str:
+    """Recommend MEV protection strategy"""
+    if risk_level == 'high':
+        return 'private_mempool'  # Use Ephemeral Rollups or Jito
+    elif risk_level == 'medium':
+        if amount > 5000:
+            return 'split_orders'  # Break into smaller orders
+        else:
+            return 'randomized_timing'
+    else:
+        return 'none'
+
+def calculate_mev_confidence(mempool_sample_size: int) -> float:
+    """Calculate confidence in MEV detection"""
+    if mempool_sample_size < 10:
+        return 0.3
+    elif mempool_sample_size < 50:
+        return 0.6
+    else:
+        return 0.9
+
+async def fetch_mempool_transactions() -> List[Dict]:
+    """Fetch recent mempool transactions"""
+    # Implementation: Query Solana RPC for pending transactions
+    return []  # Placeholder
+
+def analyze_mempool_patterns(transactions: List[Dict]) -> List[Dict]:
+    """Analyze mempool for suspicious patterns"""
+    suspicious = []
+    
+    # Look for rapid buy-sell patterns
+    for i in range(len(transactions) - 1):
+        tx1 = transactions[i]
+        tx2 = transactions[i + 1]
+        
+        if (tx1.get('type') == 'buy' and tx2.get('type') == 'sell' and
+            tx1.get('token_pair') == tx2.get('token_pair') and
+            abs(tx1.get('timestamp', 0) - tx2.get('timestamp', 0)) < 2):
+            suspicious.append({
+                'pattern': 'sandwich',
+                'transactions': [tx1, tx2]
+            })
+    
+    return suspicious
+
+mev_agent.include(mev_protocol)
+
+if __name__ == "__main__":
+    mev_agent.run()
+```
+
+### 5. Database Layer - Complete Implementation
+
+**PostgreSQL Schema (src/database/postgres/schema.ts)**
+
+```typescript
+import { Pool } from 'pg';
+
+export const createTables = async (pool: Pool): Promise<void> => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+
+    // Trades table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS trades (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_address TEXT NOT NULL,
+        input_mint TEXT NOT NULL,
+        output_mint TEXT NOT NULL,
+        input_amount BIGINT NOT NULL,
+        output_amount BIGINT NOT NULL,
+        route JSONB NOT NULL,
+        dex_fees_bps INTEGER,
+        slippage_bps INTEGER,
+        mev_protected BOOLEAN DEFAULT FALSE,
+        transaction_hash TEXT,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'confirmed', 'failed')),
+        created_at TIMESTAMP DEFAULT NOW(),
+        executed_at TIMESTAMP,
+        
+        -- Indexes
+        INDEX idx_trades_user (user_address),
+        INDEX idx_trades_status (status),
+        INDEX idx_trades_created (created_at DESC),
+        INDEX idx_trades_tx_hash (transaction_hash)
+      )
+    `);
+
+    // Liquidity snapshots table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS liquidity_snapshots (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        dex TEXT NOT NULL,
+        pool_address TEXT NOT NULL,
+        token_a_mint TEXT NOT NULL,
+        token_b_mint TEXT NOT NULL,
+        liquidity_a BIGINT NOT NULL,
+        liquidity_b BIGINT NOT NULL,
+        price DECIMAL(20, 10) NOT NULL,
+        tvl DECIMAL(20, 2),
+        volume_24h DECIMAL(20, 2),
+        timestamp TIMESTAMP DEFAULT NOW(),
+        
+        -- Indexes
+        INDEX idx_liquidity_pool (pool_address),
+        INDEX idx_liquidity_timestamp (timestamp DESC),
+        INDEX idx_liquidity_dex (dex)
+      )
+    `);
+
+    // Agent logs table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS agent_logs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agent_id TEXT NOT NULL,
+        agent_type TEXT NOT NULL CHECK (agent_type IN 
+          ('marketAnalysis', 'smartRouter', 'autonomousMM', 'mevHunter')),
+        action TEXT NOT NULL,
+        result JSONB,
+        confidence FLOAT,
+        timestamp TIMESTAMP DEFAULT NOW(),
+        
+        -- Indexes
+        INDEX idx_agent_type (agent_type),
+        INDEX idx_agent_timestamp (timestamp DESC)
+      )
+    `);
+
+    // Quote cache table (for persistent caching)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS quote_cache (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        quote_id TEXT UNIQUE NOT NULL,
+        input_mint TEXT NOT NULL,
+        output_mint TEXT NOT NULL,
+        input_amount BIGINT NOT NULL,
+        output_amount BIGINT NOT NULL,
+        routes JSONB NOT NULL,
+        price_impact FLOAT,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        
+        -- Indexes
+        INDEX idx_quote_id (quote_id),
+        INDEX idx_quote_expires (expires_at)
+      )
+    `);
+
+    // Performance metrics table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS performance_metrics (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        metric_name TEXT NOT NULL,
+        metric_value FLOAT NOT NULL,
+        tags JSONB,
+        timestamp TIMESTAMP DEFAULT NOW(),
+        
+        -- Indexes
+        INDEX idx_metrics_name (metric_name),
+        INDEX idx_metrics_timestamp (timestamp DESC)
+      )
+    `);
+
+    await client.query('COMMIT');
+    console.log('✅ Database tables created successfully');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ Error creating tables:', error);
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+// Cleanup expired quotes periodically
+export const cleanupExpiredQuotes = async (pool: Pool): Promise<void> => {
+  await pool.query(`
+    DELETE FROM quote_cache 
+    WHERE expires_at < NOW()
+  `);
+};
+```
+
+**Trade Repository (src/database/postgres/trades.ts)**
+
+```typescript
+import { Pool } from 'pg';
+import { TradeRecord, RouteSegment } from '../../types';
+import { v4 as uuidv4 } from 'uuid';
+
+export class TradeRepository {
+  constructor(private pool: Pool) {}
+
+  /**
+   * Create new trade record
+   */
+  async create(trade: Omit<TradeRecord, 'id' | 'createdAt'>): Promise<TradeRecord> {
+    const id = uuidv4();
+    const query = `
+      INSERT INTO trades (
+        id, user_address, input_mint, output_mint, 
+        input_amount, output_amount, route, dex_fees_bps, 
+        slippage_bps, mev_protected, transaction_hash, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      RETURNING *
+    `;
+
+    const values = [
+      id,
+      trade.userAddress,
+      trade.inputMint,
+      trade.outputMint,
+      trade.inputAmount,
+      trade.outputAmount,
+      JSON.stringify(trade.route),
+      trade.dexFeesBps,
+      trade.slippageBps,
+      trade.mevProtected,
+      trade.transactionHash,
+      trade.status
+    ];
+
+    const result = await this.pool.query(query, values);
+    return this.mapToTradeRecord(result.rows[0]);
+  }
+
+  /**
+   * Update trade status
+   */
+  async updateStatus(
+    id: string, 
+    status: 'pending' | 'confirmed' | 'failed',
+    executedAt?: Date
+  ): Promise<void> {
+    const query = `
+      UPDATE trades 
+      SET status = $1, executed_at = $2
+      WHERE id = $3
+    `;
+    await this.pool.query(query, [status, executedAt || new Date(), id]);
+  }
+
+  /**
+   * Get trade by ID
+   */
+  async findById(id: string): Promise<TradeRecord | null> {
+    const result = await this.pool.query(
+      'SELECT * FROM trades WHERE id = $1',
+      [id]
+    );
+    return result.rows[0] ? this.mapToTradeRecord(result.rows[0]) : null;
+  }
+
+  /**
+   * Get trades by user
+   */
+  async findByUser(
+    userAddress: string, 
+    limit: number = 50
+  ): Promise<TradeRecord[]> {
+    const result = await this.pool.query(
+      `SELECT * FROM trades 
+       WHERE user_address = $1 
+       ORDER BY created_at DESC 
+       LIMIT $2`,
+      [userAddress, limit]
+    );
+    return result.rows.map(row => this.mapToTradeRecord(row));
+  }
+
+  /**
+   * Get recent trades
+   */
+  async getRecent(limit: number = 100): Promise<TradeRecord[]> {
+    const result = await this.pool.query(
+      `SELECT * FROM trades 
+       ORDER BY created_at DESC 
+       LIMIT $1`,
+      [limit]
+    );
+    return result.rows.map(row => this.mapToTradeRecord(row));
+  }
+
+  /**
+   * Get trading volume statistics
+   */
+  async getVolumeStats(hours: number = 24): Promise<any> {
+    const query = `
+      SELECT 
+        COUNT(*) as total_trades,
+        SUM(input_amount) as total_volume_lamports,
+        AVG(slippage_bps) as avg_slippage_bps,
+        COUNT(CASE WHEN mev_protected THEN 1 END) as mev_protected_count
+      FROM trades
+      WHERE created_at > NOW() - INTERVAL '${hours} hours'
+        AND status = 'confirmed'
+    `;
+    const result = await this.pool.query(query);
+    return result.rows[0];
+  }
+
+  private mapToTradeRecord(row: any): TradeRecord {
+    return {
+      id: row.id,
+      userAddress: row.user_address,
+      inputMint: row.input_mint,
+      outputMint: row.output_mint,
+      inputAmount: row.input_amount.toString(),
+      outputAmount: row.output_amount.toString(),
+      route: JSON.parse(row.route),
+      dexFeesBps: row.dex_fees_bps,
+      slippageBps: row.slippage_bps,
+      mevProtected: row.mev_protected,
+      transactionHash: row.transaction_hash,
+      status: row.status,
+      createdAt: new Date(row.created_at),
+      executedAt: row.executed_at ? new Date(row.executed_at) : undefined
+    };
+  }
+}
+```
+
+**Redis Quote Cache (src/database/redis/quoteCache.ts)**
+
+```typescript
+import { Redis } from 'ioredis';
+import { SwapQuote } from '../../types';
+
+export class QuoteCache {
+  private readonly TTL = 30; // 30 seconds
+  private readonly PREFIX = 'quote:';
+
+  constructor(private redis: Redis) {}
+
+  /**
+   * Cache a quote
+   */
+  async set(quote: SwapQuote): Promise<void> {
+    const key = this.getKey(quote.quoteId);
+    await this.redis.setex(
+      key,
+      this.TTL,
+      JSON.stringify(quote)
+    );
+  }
+
+  /**
+   * Get cached quote
+   */
+  async get(quoteId: string): Promise<SwapQuote | null> {
+    const key = this.getKey(quoteId);
+    const data = await this.redis.get(key);
+    
+    if (!data) return null;
+    
+    const quote = JSON.parse(data) as SwapQuote;
+    
+    // Check if expired
+    if (Date.now() > quote.expiresAt) {
+      await this.redis.del(key);
+      return null;
+    }
+    
+    return quote;
+  }
+
+  /**
+   * Delete quote
+   */
+  async delete(quoteId: string): Promise<void> {
+    const key = this.getKey(quoteId);
+    await this.redis.del(key);
+  }
+
+  /**
+   * Cache route for token pair
+   */
+  async cacheRoute(
+    inputMint: string,
+    outputMint: string,
+    amount: string,
+    route: any
+  ): Promise<void> {
+    const key = `route:${inputMint}:${outputMint}:${amount}`;
+    await this.redis.setex(key, 60, JSON.stringify(route));
+  }
+
+  /**
+   * Get cached route
+   */
+  async getRoute(
+    inputMint: string,
+    outputMint: string,
+    amount: string
+  ): Promise<any | null> {
+    const key = `route:${inputMint}:${outputMint}:${amount}`;
+    const data = await this.redis.get(key);
+    return data ? JSON.parse(data) : null;
+  }
+
+  /**
+   * Cache liquidity data
+   */
+  async cacheLiquidity(
+    poolAddress: string,
+    liquidityData: any
+  ): Promise<void> {
+    const key = `liquidity:${poolAddress}`;
+    await this.redis.setex(key, 10, JSON.stringify(liquidityData));
+  }
+
+  /**
+   * Get cached liquidity
+   */
+  async getLiquidity(poolAddress: string): Promise<any | null> {
+    const key = `liquidity:${poolAddress}`;
+    const data = await this.redis.get(key);
+    return data ? JSON.parse(data) : null;
+  }
+
+  /**
+   * Increment quote request counter (rate limiting)
+   */
+  async incrementQuoteRequests(userAddress: string): Promise<number> {
+    const key = `rate:${userAddress}`;
+    const count = await this.redis.incr(key);
+    
+    if (count === 1) {
+      await this.redis.expire(key, 60); // 1 minute window
+    }
+    
+    return count;
+  }
+
+  private getKey(quoteId: string): string {
+    return `${this.PREFIX}${quoteId}`;
+  }
+}
+```
+
+### 6. Error Handling System
+
+**Custom Errors (src/utils/errors.ts)**
+
+```typescript
+import { ErrorCode } from '../types';
+
+export class LiquidityFlowError extends Error {
+  constructor(
+    public code: ErrorCode,
+    public message: string,
+    public statusCode: number = 400,
+    public details?: any
+  ) {
+    super(message);
+    this.name = 'LiquidityFlowError';
+    Object.setPrototypeOf(this, LiquidityFlowError.prototype);
+  }
+
+  toJSON() {
+    return {
+      code: this.code,
+      message: this.message,
+      details: this.details
+    };
+  }
+}
+
+// Specific error classes
+export class QuoteExpiredError extends LiquidityFlowError {
+  constructor(quoteId: string) {
+    super(
+      ErrorCode.QUOTE_EXPIRED,
+      `Quote ${quoteId} has expired`,
+      400,
+      { quoteId }
+    );
+  }
+}
+
+export class InsufficientLiquidityError extends LiquidityFlowError {
+  constructor(tokenPair: string, amount: string) {
+    super(
+      ErrorCode.INSUFFICIENT_LIQUIDITY,
+      `Insufficient liquidity for ${tokenPair} with amount ${amount}`,
+      400,
+      { tokenPair, amount }
+    );
+  }
+}
+
+export class SlippageExceededError extends LiquidityFlowError {
+  constructor(expected: number, actual: number) {
+    super(
+      ErrorCode.SLIPPAGE_EXCEEDED,
+      `Slippage exceeded: expected ${expected}%, got ${actual}%`,
+      400,
+      { expected, actual }
+    );
+  }
+}
+
+export class NoRouteFoundError extends LiquidityFlowError {
+  constructor(inputToken: string, outputToken: string) {
+    super(
+      ErrorCode.NO_ROUTE_FOUND,
+      `No route found from ${inputToken} to ${outputToken}`,
+      404,
+      { inputToken, outputToken }
+    );
+  }
+}
+
+export class RateLimitError extends LiquidityFlowError {
+  constructor(retryAfter: number) {
+    super(
+      ErrorCode.RATE_LIMIT_EXCEEDED,
+      `Rate limit exceeded. Retry after ${retryAfter} seconds`,
+      429,
+      { retryAfter }
+    );
+  }
+}
+```
+
+**Error Handler Middleware (src/api/middleware/errorHandler.ts)**
+
+```typescript
+import { Request, Response, NextFunction } from 'express';
+import { LiquidityFlowError } from '../../utils/errors';
+import { logger } from '../../utils/logger';
+
+export const errorHandler = (
+  error: Error,
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  // Log error
+  logger.error('Error occurred:', {
+    error: error.message,
+    stack: error.stack,
+    path: req.path,
+    method: req.method,
+    body: req.body
+  });
+
+  // Handle LiquidityFlowError
+  if (error instanceof LiquidityFlowError) {
+    return res.status(error.statusCode).json({
+      success: false,
+      error: error.toJSON(),
+      metadata: {
+        timestamp: Date.now(),
+        requestId: req.headers['x-request-id'] as string,
+        serverVersion: process.env.npm_package_version || '1.0.0'
+      }
+    });
+  }
+
+  // Handle Solana Web3 errors
+  if (error.name === 'SendTransactionError') {
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: 'E2002',
+        message: 'Transaction failed on Solana network',
+        details: error.message
+      },
+      metadata: {
+        timestamp: Date.now(),
+        requestId: req.headers['x-request-id'] as string,
+        serverVersion: process.env.npm_package_version || '1.0.0'
+      }
+    });
+  }
+
+  // Handle validation errors
+  if (error.name === 'ValidationError') {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'E1000',
+        message: 'Validation failed',
+        details: error.message
+      },
+      metadata: {
+        timestamp: Date.now(),
+        requestId: req.headers['x-request-id'] as string,
+        serverVersion: process.env.npm_package_version || '1.0.0'
+      }
+    });
+  }
+
+  // Generic error
+  res.status(500).json({
+    success: false,
+    error: {
+      code: 'E5000',
+      message: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    },
+    metadata: {
+      timestamp: Date.now(),
+      requestId: req.headers['x-request-id'] as string,
+      serverVersion: process.env.npm_package_version || '1.0.0'
+    }
+  });
+};
+```
+
+### 7. Configuration System
+
+**Main Config (src/config/index.ts)**
+
+```typescript
+import { config as dotenvConfig } from 'dotenv';
+import { AppConfig } from '../types';
+
+// Load environment variables
+dotenvConfig({ path: process.env.NODE_ENV === 'production' ? '.env' : '.env.devnet' });
+
+export const config: AppConfig = {
+  port: parseInt(process.env.PORT || '3000', 10),
+  nodeEnv: (process.env.NODE_ENV || 'development') as 'development' | 'production' | 'test',
+  logLevel: (process.env.LOG_LEVEL || 'info') as 'debug' | 'info' | 'warn' | 'error',
+
+  solana: {
+    rpcEndpoint: process.env.SOLANA_RPC_ENDPOINT || 'https://api.devnet.solana.com',
+    commitment: (process.env.SOLANA_COMMITMENT || 'confirmed') as 'processed' | 'confirmed' | 'finalized',
+    walletPrivateKey: process.env.SOLANA_WALLET_PRIVATE_KEY || ''
+  },
+
+  database: {
+    postgres: {
+      host: process.env.POSTGRES_HOST || 'localhost',
+      port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
+      user: process.env.POSTGRES_USER || 'liquidityflow',
+      password: process.env.POSTGRES_PASSWORD || '',
+      database: process.env.POSTGRES_DB || 'liquidityflow_db'
+    },
+    redis: {
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379', 10)
+    }
+  },
+
+  dex: {
+    jupiterApiUrl: process.env.JUPITER_API_URL || 'https://quote-api.jup.ag/v6',
+    maxRetries: 3,
+    timeoutMs: 5000
+  },
+
+  agents: {
+    serverHost: process.env.AGENT_SERVER_HOST || 'localhost',
+    serverPort: parseInt(process.env.AGENT_SERVER_PORT || '50051', 10),
+    network: (process.env.FETCH_AI_NETWORK || 'testnet') as 'testnet' | 'mainnet'
+  },
+
+  rateLimit: {
+    windowMs: 60000, // 1 minute
+    maxRequests: 100
+  }
+};
+
+// Validate required config
+export const validateConfig = (): void => {
+  const required = [
+    'SOLANA_WALLET_PRIVATE_KEY',
+    'POSTGRES_PASSWORD'
+  ];
+
+  const missing = required.filter(key => !process.env[key]);
+  
+  if (missing.length > 0) {
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  }
+};
+```
+
+**Constants (src/utils/constants.ts)**
+
+```typescript
+import { PublicKey } from '@solana/web3.js';
+
+// Token Mints (Devnet)
+export const TOKEN_MINTS = {
+  SOL: 'So11111111111111111111111111111111111111112',
+  USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  USDT: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+  // Add more devnet tokens
+};
+
+// DEX Program IDs
+export const DEX_PROGRAMS = {
+  JUPITER: new PublicKey('JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4'),
+  ORCA: new PublicKey('whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc'),
+  RAYDIUM: new PublicKey('675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8')
+};
+
+// Network Constants
+export const NETWORK = {
+  DEVNET_RPC: 'https://api.devnet.solana.com',
+  MAINNET_RPC: 'https://api.mainnet-beta.solana.com',
+  LAMPORTS_PER_SOL: 1_000_000_000
+};
+
+// Trading Constants
+export const TRADING = {
+  MAX_SLIPPAGE_BPS: 1000, // 10%
+  DEFAULT_SLIPPAGE_BPS: 50, // 0.5%
+  MAX_HOPS: 5,
+  MIN_TRADE_AMOUNT: 0.001, // SOL
+  MAX_TRADE_AMOUNT: 1000, // SOL
+  GAS_ESTIMATE_LAMPORTS: 5000
+};
+
+// Cache TTLs (seconds)
+export const CACHE_TTL = {
+  QUOTE: 30,
+  ROUTE: 60,
+  LIQUIDITY: 10,
+  PRICE: 5
+};
+```
+
+### 8. Main Server Setup
+
+**Express Server (src/api/server.ts)**
+
+```typescript
+import express, { Application } from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import compression from 'compression';
+import { rateLimit } from 'express-rate-limit';
+import { Server } from 'http';
+import { Server as SocketIOServer } from 'socket.io';
+
+// Middleware
+import { errorHandler } from './middleware/errorHandler';
+import { requestLogger } from './middleware/logger';
+import { requestIdMiddleware } from './middleware/requestId';
+
+// Routes
+import quotesRouter from './routes/quotes';
+import swapRouter from './routes/swap';
+import routesRouter from './routes/routes';
+import agentsRouter from './routes/agents';
+import healthRouter from './routes/health';
+
+// WebSocket
+import { setupPriceStream } from './websocket/priceStream';
+
+// Config
+import { config } from '../config';
+import { logger } from '../utils/logger';
+
+export class AppServer {
+  private app: Application;
+  private server: Server | null = null;
+  private io: SocketIOServer | null = null;
+
+  constructor() {
+    this.app = express();
+    this.setupMiddleware();
+    this.setupRoutes();
+    this.setupErrorHandling();
+  }
+
+  private setupMiddleware(): void {
+    // Security
+    this.app.use(helmet());
+    this.app.use(cors({
+      origin: process.env.CORS_ORIGIN || '*',
+      credentials: true
+    }));
+
+    // Compression
+    this.app.use(compression());
+
+    // Body parsing
+    this.app.use(express.json({ limit: '10mb' }));
+    this.app.use(express.urlencoded({ extended: true }));
+
+    // Request ID
+    this.app.use(requestIdMiddleware);
+
+    // Logging
+    this.app.use(requestLogger);
+
+    // Rate limiting
+    const limiter = rateLimit({
+      windowMs: config.rateLimit.windowMs,
+      max: config.rateLimit.maxRequests,
+      message: 'Too many requests from this IP',
+      standardHeaders: true,
+      legacyHeaders: false
+    });
+    this.app.use('/api/', limiter);
+  }
+
+  private setupRoutes(): void {
+    // API routes
+    this.app.use('/api/quotes', quotesRouter);
+    this.app.use('/api/swap', swapRouter);
+    this.app.use('/api/routes', routesRouter);
+    this.app.use('/api/agents', agentsRouter);
+    this.app.use('/api/health', healthRouter);
+
+    // Root
+    this.app.get('/', (req, res) => {
+      res.json({
+        name: 'LiquidityFlow API',
+        version: process.env.npm_package_version || '1.0.0',
+        status: 'running',
+        endpoints: [
+          'GET /api/quotes',
+          'POST /api/swap',
+          'GET /api/routes',
+          'POST /api/agents/execute',
+          'GET /api/health',
+          'WS /api/stream'
+        ]
+      });
+    });
+
+    // 404 handler
+    this.app.use((req, res) => {
+      res.status(404).json({
+        success: false,
+        error: {
+          code: 'E404',
+          message: 'Endpoint not found'
+        }
+      });
+    });
+  }
+
+  private setupErrorHandling(): void {
+    this.app.use(errorHandler);
+  }
+
+  public async start(): Promise<void> {
+    return new Promise((resolve) => {
+      this.server = this.app.listen(config.port, () => {
+        logger.info(`🚀 LiquidityFlow API listening on port ${config.port}`);
+        logger.info(`📊 Environment: ${config.nodeEnv}`);
+        logger.info(`🔗 Solana RPC: ${config.solana.rpcEndpoint}`);
+        
+        // Setup WebSocket server
+        if (this.server) {
+          this.io = new SocketIOServer(this.server, {
+            cors: {
+              origin: '*'
+            }
+          });
+          setupPriceStream(this.io);
+          logger.info('📡 WebSocket server initialized');
+        }
+        
+        resolve();
+      });
+    });
+  }
+
+  public async stop(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (this.io) {
+        this.io.close();
+      }
+      
+      if (this.server) {
+        this.server.close((err) => {
+          if (err) reject(err);
+          else {
+            logger.info('Server stopped');
+            resolve();
+          }
+        });
+      } else {
+        resolve();
+      }
+    });
+  }
+
+  public getApp(): Application {
+    return this.app;
+  }
+}
+```
+
+**Main Entry Point (src/index.ts)**
+
+```typescript
+import { AppServer } from './api/server';
+import { config, validateConfig } from './config';
+import { logger } from './utils/logger';
+import { connectDatabase, closeDatabase } from './database/postgres/connection';
+import { connectRedis, closeRedis } from './database/redis/client';
+import { createTables } from './database/postgres/schema';
+
+async function bootstrap() {
+  try {
+    // Validate configuration
+    logger.info('Validating configuration...');
+    validateConfig();
+
+    // Connect to databases
+    logger.info('Connecting to PostgreSQL...');
+    await connectDatabase();
+    await createTables();
+    logger.info('✅ PostgreSQL connected');
+
+    logger.info('Connecting to Redis...');
+    await connectRedis();
+    logger.info('✅ Redis connected');
+
+    // Start server
+    logger.info('Starting API server...');
+    const server = new AppServer();
+    await server.start();
+    logger.info('✅ API server started');
+
+    // Graceful shutdown
+    const shutdown = async (signal: string) => {
+      logger.info(`${signal} received, shutting down gracefully...`);
+      
+      try {
+        await server.stop();
+        await closeDatabase();
+        await closeRedis();
+        logger.info('✅ Shutdown complete');
+        process.exit(0);
+      } catch (error) {
+        logger.error('Error during shutdown:', error);
+        process.exit(1);
+      }
+    };
+
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
+
+  } catch (error) {
+    logger.error('Failed to start application:', error);
+    process.exit(1);
+  }
+}
+
+bootstrap();
+```
+
+### 9. Solana Program (Anchor/Rust)
+
+**Swap Executor Program (programs/swap_executor/src/lib.rs)**
+
+```rust
+use anchor_lang::prelude::*;
+use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+
+declare_id!("YourProgramIDHere111111111111111111111111111");
+
+#[program]
+pub mod swap_executor {
+    use super::*;
+
+    /// Initialize the swap executor state
+    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+        let state = &mut ctx.accounts.state;
+        state.authority = ctx.accounts.authority.key();
+        state.total_swaps = 0;
+        state.total_volume = 0;
+        state.fee_bps = 5; // 0.05% default fee
+        msg!("Swap executor initialized");
+        Ok(())
+    }
+
+    /// Execute a swap through specified DEX
+    pub fn execute_swap(
+        ctx: Context<ExecuteSwap>,
+        amount_in: u64,
+        minimum_amount_out: u64,
+        dex: Dex,
+    ) -> Result<()> {
+        let state = &mut ctx.accounts.state;
+        
+        // Validate minimum amount
+        require!(amount_in > 0, ErrorCode::InvalidAmount);
+        require!(minimum_amount_out > 0, ErrorCode::InvalidAmount);
+
+        // Calculate protocol fee
+        let fee_amount = amount_in
+            .checked_mul(state.fee_bps as u64)
+            .unwrap()
+            .checked_div(10000)
+            .unwrap();
+        
+        let swap_amount = amount_in.checked_sub(fee_amount).unwrap();
+
+        // Transfer tokens from user to program
+        let cpi_accounts = Transfer {
+            from: ctx.accounts.user_source.to_account_info(),
+            to: ctx.accounts.program_source.to_account_info(),
+            authority: ctx.accounts.user.to_account_info(),
+        };
+        let cpi_program = ctx.accounts.token_program.to_account_info();
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+        token::transfer(cpi_ctx, amount_in)?;
+
+        // Execute swap based on DEX
+        let amount_out = match dex {
+            Dex::Jupiter => execute_jupiter_swap(ctx, swap_amount)?,
+            Dex::Orca => execute_orca_swap(ctx, swap_amount)?,
+            Dex::Raydium => execute_raydium_swap(ctx, swap_amount)?,
+        };
+
+        // Validate slippage
+        require!(
+            amount_out >= minimum_amount_out,
+            ErrorCode::SlippageExceeded
+        );
+
+        // Transfer output tokens to user
+        let cpi_accounts = Transfer {
+            from: ctx.accounts.program_destination.to_account_info(),
+            to: ctx.accounts.user_destination.to_account_info(),
+            authority: ctx.accounts.state.to_account_info(),
+        };
+        let cpi_program = ctx.accounts.token_program.to_account_info();
+        let seeds = &[b"state".as_ref(), &[ctx.bumps.state]];
+        let signer = &[&seeds[..]];
+        let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer);
+        token::transfer(cpi_ctx, amount_out)?;
+
+        // Update state
+        state.total_swaps += 1;
+        state.total_volume += amount_in;
+
+        emit!(SwapExecuted {
+            user: ctx.accounts.user.key(),
+            amount_in,
+            amount_out,
+            dex,
+            timestamp: Clock::get()?.unix_timestamp,
+        });
+
+        Ok(())
+    }
+
+    /// Execute multi-leg swap route
+    pub fn execute_route(
+        ctx: Context<ExecuteRoute>,
+        legs: Vec<SwapLeg>,
+        minimum_final_amount: u64,
+    ) -> Result<()> {
+        require!(legs.len() > 0 && legs.len() <= 5, ErrorCode::InvalidRoute);
+
+        let mut current_amount = legs[0].amount_in;
+
+        for (i, leg) in legs.iter().enumerate() {
+            msg!("Executing leg {}: {:?}", i, leg.dex);
+            
+            // Execute individual swap
+            current_amount = execute_leg_swap(ctx, leg, current_amount)?;
+        }
+
+        // Validate final output
+        require!(
+            current_amount >= minimum_final_amount,
+            ErrorCode::SlippageExceeded
+        );
+
+        emit!(RouteExecuted {
+            user: ctx.accounts.user.key(),
+            legs: legs.len() as u8,
+            final_amount: current_amount,
+            timestamp: Clock::get()?.unix_timestamp,
+        });
+
+        Ok(())
+    }
+}
+
+// Helper functions
+fn execute_jupiter_swap<'info>(
+    ctx: Context<'_, '_, '_, 'info, ExecuteSwap<'info>>,
+    amount: u64,
+) -> Result<u64> {
+    // Placeholder: Call Jupiter program
+    msg!("Executing Jupiter swap for amount: {}", amount);
+    Ok(amount) // Simplified
+}
+
+fn execute_orca_swap<'info>(
+    ctx: Context<'_, '_, '_, 'info, ExecuteSwap<'info>>,
+    amount: u64,
+) -> Result<u64> {
+    // Placeholder: Call Orca Whirlpool program
+    msg!("Executing Orca swap for amount: {}", amount);
+    Ok(amount) // Simplified
+}
+
+fn execute_raydium_swap<'info>(
+    ctx: Context<'_, '_, '_, 'info, ExecuteSwap<'info>>,
+    amount: u64,
+) -> Result<u64> {
+    // Placeholder: Call Raydium program
+    msg!("Executing Raydium swap for amount: {}", amount);
+    Ok(amount) // Simplified
+}
+
+fn execute_leg_swap<'info>(
+    ctx: Context<'_, '_, '_, 'info, ExecuteRoute<'info>>,
+    leg: &SwapLeg,
+    amount: u64,
+) -> Result<u64> {
+    // Execute individual leg based on DEX
+    Ok(amount) // Simplified
+}
+
+// Account structures
+#[derive(Accounts)]
+pub struct Initialize<'info> {
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + State::SIZE,
+        seeds = [b"state"],
+        bump
+    )]
+    pub state: Account<'info, State>,
+    
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteSwap<'info> {
+    #[account(
+        mut,
+        seeds = [b"state"],
+        bump
+    )]
+    pub state: Account<'info, State>,
+    
+    #[account(mut)]
+    pub user: Signer<'info>,
+    
+    #[account(mut)]
+    pub user_source: Account<'info, TokenAccount>,
+    
+    #[account(mut)]
+    pub user_destination: Account<'info, TokenAccount>,
+    
+    #[account(mut)]
+    pub program_source: Account<'info, TokenAccount>,
+    
+    #[account(mut)]
+    pub program_destination: Account<'info, TokenAccount>,
+    
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteRoute<'info> {
+    #[account(
+        mut,
+        seeds = [b"state"],
+        bump
+    )]
+    pub state: Account<'info, State>,
+    
+    #[account(mut)]
+    pub user: Signer<'info>,
+    
+    pub token_program: Program<'info, Token>,
+    
+    // Additional accounts for multi-leg swaps would be passed as remaining_accounts
+}
+
+// State
+#[account]
+pub struct State {
+    pub authority: Pubkey,
+    pub total_swaps: u64,
+    pub total_volume: u64,
+    pub fee_bps: u16,
+}
+
+impl State {
+    pub const SIZE: usize = 32 + 8 + 8 + 2;
+}
+
+// Data structures
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug)]
+pub enum Dex {
+    Jupiter,
+    Orca,
+    Raydium,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct SwapLeg {
+    pub dex: Dex,
+    pub amount_in: u64,
+    pub minimum_amount_out: u64,
+}
+
+// Events
+#[event]
+pub struct SwapExecuted {
+    pub user: Pubkey,
+    pub amount_in: u64,
+    pub amount_out: u64,
+    pub dex: Dex,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct RouteExecuted {
+    pub user: Pubkey,
+    pub legs: u8,
+    pub final_amount: u64,
+    pub timestamp: i64,
+}
+
+// Errors
+#[error_code]
+pub enum ErrorCode {
+    #[msg("Invalid amount")]
+    InvalidAmount,
+    
+    #[msg("Slippage tolerance exceeded")]
+    SlippageExceeded,
+    
+    #[msg("Invalid route")]
+    InvalidRoute,
+    
+    #[msg("Unauthorized")]
+    Unauthorized,
+}
+```
+
+### 10. Testing Framework
+
+**Jest Configuration (jest.config.js)**
+
+```javascript
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  roots: ['<rootDir>/tests'],
+  testMatch: ['**/*.test.ts'],
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/**/*.d.ts',
+    '!src/types/**',
+  ],
+  coverageThreshold: {
+    global: {
+      branches: 70,
+      functions: 70,
+      lines: 70,
+      statements: 70,
+    },
+  },
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
+  testTimeout: 30000,
+};
+```
+
+**Test Setup (tests/setup.ts)**
+
+```typescript
+import { config } from 'dotenv';
+import { Connection } from '@solana/web3.js';
+
+// Load test environment
+config({ path: '.env.test' });
+
+// Global test utilities
+export const testConnection = new Connection(
+  'https://api.devnet.solana.com',
+  'confirmed'
+);
+
+// Mock data
+export const MOCK_WALLET = '11111111111111111111111111111111';
+export const MOCK_SOL_MINT = 'So11111111111111111111111111111111111111112';
+export const MOCK_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+
+// Test helpers
+export const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Cleanup after tests
+afterAll(async () => {
+  // Close database connections
+  // Clean up test data
+});
+```
+
+**Unit Test Example (tests/unit/pathfinder.test.ts)**
+
+```typescript
+import { PathFinder } from '../../src/core/smartRouter/pathfinder';
+import { LiquidityPool } from '../../src/types';
+
+describe('PathFinder', () => {
+  let pathFinder: PathFinder;
+  
+  beforeEach(() => {
+    pathFinder = new PathFinder();
+  });
+
+  describe('findOptimalPaths', () => {
+    it('should find direct path for simple swap', async () => {
+      const mockPools: LiquidityPool[] = [
+        {
+          address: 'pool1',
+          dex: 'Orca',
+          tokenA: { mint: 'SOL', symbol: 'SOL', decimals: 9 },
+          tokenB: { mint: 'USDC', symbol: 'USDC', decimals: 6 },
+          liquidityA: '1000000000000',
+          liquidityB: '100000000000',
+          price: 100,
+          fee: 30,
+          tvl: 2000000,
+          volume24h: 500000
+        }
+      ];
+
+      // Set up mock liquidity graph
+      pathFinder['liquidityGraph'] = new Map([['SOL', mockPools]]);
+
+      const paths = await pathFinder.findOptimalPaths('SOL', 'USDC', '1000000000');
+
+      expect(paths).toHaveLength(1);
+      expect(paths[0].nodes).toHaveLength(1);
+      expect(paths[0].nodes[0].token).toBe('USDC');
+    });
+
+    it('should find multi-hop path when no direct path exists', async () => {
+      const mockPools: LiquidityPool[] = [
+        {
+          address: 'pool1',
+          dex: 'Orca',
+          tokenA: { mint: 'SOL', symbol: 'SOL', decimals: 9 },
+          tokenB: { mint: 'USDT', symbol: 'USDT', decimals: 6 },
+          liquidityA: '1000000000000',
+          liquidityB: '100000000000',
+          price: 100,
+          fee: 30,
+          tvl: 2000000,
+          volume24h: 500000
+        },
+        {
+          address: 'pool2',
+          dex: 'Raydium',
+          tokenA: { mint: 'USDT', symbol: 'USDT', decimals: 6 },
+          tokenB: { mint: 'BONK', symbol: 'BONK', decimals: 5 },
+          liquidityA: '100000000000',
+          liquidityB: '10000000000000',
+          price: 0.00001,
+          fee: 25,
+          tvl: 1000000,
+          volume24h: 300000
+        }
+      ];
+
+      pathFinder['liquidityGraph'] = new Map([
+        ['SOL', [mockPools[0]]],
+        ['USDT', [mockPools[1]]]
+      ]);
+
+      const paths = await pathFinder.findOptimalPaths('SOL', 'BONK', '1000000000');
+
+      expect(paths.length).toBeGreaterThan(0);
+      expect(paths[0].nodes.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should respect max hops limit', async () => {
+      pathFinder['maxHops'] = 2;
+
+      // Test with path that would require 3+ hops
+      const paths = await pathFinder.findOptimalPaths('SOL', 'RARE_TOKEN', '1000000000');
+
+      paths.forEach(path => {
+        expect(path.nodes.length).toBeLessThanOrEqual(2);
+      });
+    });
+  });
+
+  describe('calculateSwap', () => {
+    it('should calculate correct output amount', () => {
+      const pool: LiquidityPool = {
+        address: 'pool1',
+        dex: 'Orca',
+        tokenA: { mint: 'SOL', symbol: 'SOL', decimals: 9 },
+        tokenB: { mint: 'USDC', symbol: 'USDC', decimals: 6 },
+        liquidityA: '1000000000000', // 1000 SOL
+        liquidityB: '100000000000',   // 100,000 USDC
+        price: 100,
+        fee: 30, // 0.3%
+        tvl: 2000000,
+        volume24h: 500000
+      };
+
+      const result = pathFinder['calculateSwap'](pool, 'SOL', '1000000000'); // 1 SOL
+
+      expect(parseFloat(result.amountOut)).toBeGreaterThan(0);
+      expect(result.priceImpact).toBeGreaterThanOrEqual(0);
+      expect(result.priceImpact).toBeLessThan(0.01); // <1% for small trade
+    });
+  });
+});
+```
+
+**Integration Test Example (tests/integration/devnetSwap.test.ts)**
+
+```typescript
+import { Connection, Keypair, PublicKey } from '@solana/web3.js';
+import { JupiterClient } from '../../src/core/dexAggregator/jupiterClient';
+import { MOCK_SOL_MINT, MOCK_USDC_MINT, testConnection } from '../setup';
+
+describe('Devnet Swap Integration', () => {
+  let connection: Connection;
+  let jupiterClient: JupiterClient;
+  let testWallet: Keypair;
+
+  beforeAll(async () => {
+    connection = testConnection;
+    jupiterClient = new JupiterClient();
+    
+    // Load test wallet (should have devnet SOL)
+    testWallet = Keypair.generate();
+    
+    // Airdrop some SOL for testing
+    const signature = await connection.requestAirdrop(
+      testWallet.publicKey,
+      2 * 1000000000 // 2 SOL
+    );
+    await connection.confirmTransaction(signature);
+  });
+
+  it('should get quote from Jupiter on devnet', async () => {
+    const quote = await jupiterClient.getQuote(
+      MOCK_SOL_MINT,
+      MOCK_USDC_MINT,
+      '1000000000', // 1 SOL
+      50 // 0.5% slippage
+    );
+
+    expect(quote).not.toBeNull();
+    expect(quote!.inputAmount).toBe('1000000000');
+    expect(parseFloat(quote!.outputAmount)).toBeGreaterThan(0);
+    expect(quote!.routes.length).toBeGreaterThan(0);
+  });
+
+  it('should execute actual swap on devnet', async () => {
+    // This test requires proper setup and should be run manually
+    // as it executes real transactions on devnet
+    
+    const quote = await jupiterClient.getQuote(
+      MOCK_SOL_MINT,
+      MOCK_USDC_MINT,
+      '100000000', // 0.1 SOL
+      100 // 1% slippage
+    );
+
+    expect(quote).not.toBeNull();
+    
+    // Execute swap (implementation depends on your swap executor)
+    // const result = await executeSwap(testWallet, quote);
+    // expect(result.status).toBe('confirmed');
+  }, 60000); // 60 second timeout for devnet
+});
+```
+
+### 11. Docker Setup
+
+**docker-compose.yml**
+
+```yaml
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: liquidityflow-postgres
+    environment:
+      POSTGRES_USER: liquidityflow
+      POSTGRES_PASSWORD: devnet_password
+      POSTGRES_DB: liquidityflow_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U liquidityflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: liquidityflow-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: liquidityflow-backend
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+    command: npm run dev
+
+  agents:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.agent
+    container_name: liquidityflow-agents
+    ports:
+      - "8001-8004:8001-8004"
+      - "50051:50051"
+    environment:
+      AGENT_SERVER_HOST: 0.0.0.0
+      AGENT_SERVER_PORT: 50051
+    volumes:
+      - ./agents:/app/agents
+    command: python -m agents.market_analysis_agent
+
+volumes:
+  postgres_data:
+  redis_data:
+```
+
+**Dockerfile**
+
+```dockerfile
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm ci
+
+# Copy source
+COPY . .
+
+# Build TypeScript
+RUN npm run build
+
+# Production image
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy built files and dependencies
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./
