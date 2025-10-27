@@ -17,6 +17,7 @@ import quotesRouter from './routes/quotes';
 import swapRouter from './routes/swap';
 import routesRouter from './routes/routes';
 import agentsRouter from './routes/agents';
+import transactionsRouter from './routes/transactions';
 
 // WebSocket
 import { setupPriceStream } from './websocket/priceStream';
@@ -87,6 +88,7 @@ export class AppServer {
     this.app.use('/api/swap', swapRouter);
     this.app.use('/api/routes', routesRouter);
     this.app.use('/api/agents', agentsRouter);
+    this.app.use('/api/transactions', transactionsRouter);
 
     // Root endpoint
     this.app.get('/', (_req, res) => {

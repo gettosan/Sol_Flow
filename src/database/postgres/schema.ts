@@ -123,6 +123,44 @@ export async function createTables(): Promise<void> {
       )
     `);
 
+    // Transaction history table
+    await query(`
+      CREATE TABLE IF NOT EXISTS transaction_history (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        signature TEXT UNIQUE NOT NULL,
+        user_address TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'confirmed', 'failed', 'finalized')),
+        block_time TIMESTAMP,
+        slot BIGINT,
+        confirmation_status TEXT,
+        error_message TEXT,
+        fee BIGINT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // Create indexes for transaction_history
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_tx_signature 
+      ON transaction_history(signature)
+    `);
+
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_tx_user 
+      ON transaction_history(user_address)
+    `);
+
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_tx_status 
+      ON transaction_history(status)
+    `);
+
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_tx_created 
+      ON transaction_history(created_at DESC)
+    `);
+
     // Create indexes for quote_cache
     await query(`
       CREATE INDEX IF NOT EXISTS idx_quote_id 
@@ -174,6 +212,7 @@ export async function dropTables(): Promise<void> {
     'liquidity_snapshots',
     'agent_logs',
     'quote_cache',
+    'transaction_history',
     'performance_metrics',
   ];
 
