@@ -9,6 +9,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added - 2024-10-27
 
+#### Feature 3: REST API Layer with Express.js
+
+**What was built:**
+- Complete Express.js server with middleware setup
+- REST API endpoints for quotes, swap, routes, and agents
+- WebSocket support for real-time quote streaming
+- Middleware for request ID, logging, validation, and error handling
+- Rate limiting and security (Helmet, CORS, Compression)
+- Health check endpoint
+- Graceful shutdown handling
+
+**Files Created:**
+- `src/api/server.ts` - Main Express server setup
+- `src/index.ts` - Application entry point
+- `src/api/middleware/requestId.ts` - Request ID middleware
+- `src/api/middleware/requestLogger.ts` - Request logging middleware
+- `src/api/middleware/errorHandler.ts` - Global error handling
+- `src/api/middleware/validation.ts` - Input validation middleware
+- `src/api/routes/health.ts` - Health check endpoint
+- `src/api/routes/quotes.ts` - Quote generation endpoint
+- `src/api/routes/swap.ts` - Swap execution endpoint
+- `src/api/routes/routes.ts` - Route discovery endpoint
+- `src/api/routes/agents.ts` - Agent execution endpoint
+- `src/api/websocket/priceStream.ts` - WebSocket price streaming
+- `tests/unit/api.test.ts` - API layer tests
+
+**Design Decisions:**
+
+1. **Modular Architecture**: Separated middleware, routes, and WebSocket into distinct modules for maintainability
+
+2. **Security First**: Implemented Helmet for security headers, CORS for cross-origin requests, and rate limiting
+
+3. **Request Tracking**: Every request gets a unique ID for tracing and debugging
+
+4. **Error Handling**: Centralized error handling with custom error classes and detailed error responses
+
+5. **Health Monitoring**: Health endpoint checks database and Redis connectivity
+
+6. **WebSocket Support**: Real-time quote streaming with room-based subscriptions
+
+**Known Issues/Limitations:**
+
+1. **Quote Engine**: Quote endpoint returns mock data - needs integration with real DEX aggregators
+2. **Swap Execution**: Swap endpoint is a placeholder - requires Solana program integration
+3. **Route Discovery**: Routes endpoint needs smart router implementation
+4. **Agents**: Agent endpoints require Fetch.ai agent integration
+
+**API Endpoints:**
+- `GET /` - API information
+- `GET /api/health` - Health check with service status
+- `GET /api/quotes` - Get swap quotes
+- `POST /api/swap` - Execute swaps
+- `GET /api/routes` - Get available routes
+- `POST /api/agents/execute` - Execute agent actions
+- `WS /api/stream` - Real-time price streaming
+
+**Testing:**
+- Unit tests (52 tests) - All passing
+- Tests cover server initialization, error handling, and route configuration
+- Test coverage for all middleware and route handlers
+
+---
+
+### Added - 2024-10-27
+
 #### Feature 2: Docker Infrastructure and Database Layer
 
 **What was built:**
