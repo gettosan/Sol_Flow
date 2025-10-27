@@ -33,6 +33,9 @@
   "homepage": "https://github.com/gettosan/Sol_Flow#readme",
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
+    "@jup-ag/api": "^6.0.45",
+    "@orca-so/sdk": "^1.2.26",
+    "@raydium-io/raydium-sdk": "^1.3.1-beta.58",
     "@solana/web3.js": "^1.98.4",
     "axios": "^1.12.2",
     "compression": "^1.8.1",

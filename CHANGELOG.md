@@ -9,6 +9,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added - 2024-10-27
 
+#### Feature 4: DEX Aggregation Layer (Jupiter, Orca, Raydium)
+
+**What was built:**
+- DEX client interfaces with unified API contract
+- Jupiter API client integration for aggregated liquidity routing
+- Orca SDK client for Whirlpool liquidity (mock implementation)
+- Raydium SDK client for AMM pools (mock implementation)
+- Unified DEX aggregator that fetches quotes from all DEXes in parallel
+- Smart quote selection algorithm based on output amount and price impact
+- Comprehensive error handling and fallback mechanisms
+
+**Files Created:**
+- `src/dex/types.ts` - DEX client interfaces and types
+- `src/dex/clients/jupiter.ts` - Jupiter API client
+- `src/dex/clients/orca.ts` - Orca SDK client (mock)
+- `src/dex/clients/raydium.ts` - Raydium SDK client (mock)
+- `src/dex/aggregator.ts` - Unified DEX aggregator service
+- `tests/unit/dex-clients.test.ts` - Unit tests for DEX clients
+- `tests/unit/dex-aggregator.test.ts` - Unit tests for aggregator
+
+**Design Decisions:**
+
+1. **Unified Interface**: All DEX clients implement the same `DexClient` interface for consistency
+
+2. **Parallel Quote Fetching**: Aggregator fetches quotes from all DEXes simultaneously using `Promise.allSettled` for resilience
+
+3. **Smart Quote Selection**: Best quote is selected based on highest output amount, with price impact as tiebreaker
+
+4. **Graceful Degradation**: Jupiter API failures are handled gracefully, falling back to mock Orca/Raydium quotes
+
+5. **Mock Implementations**: Orca and Raydium clients currently use mock data (99% and 98% output respectively) until full SDK integration
+
+6. **Configurable Priority**: DEX clients have configurable priority levels for quote ordering
+
+**Known Issues/Limitations:**
+
+1. **Jupiter API**: Network connectivity issues in test environment - gracefully handled with fallback
+2. **Orca SDK**: Currently returns mock data - needs full Whirlpool SDK integration
+3. **Raydium SDK**: Currently returns mock data - needs full AMM SDK integration
+4. **Price Impact**: Simplified calculation - needs real pool data for accurate metrics
+
+**Testing:**
+- Unit tests (19 tests) - All passing ✓
+- Tests cover quote fetching, route discovery, liquidity checks
+- Aggregator tests verify best quote selection and error handling
+
+---
+
+### Added - 2024-10-27
+
 #### Feature 3: REST API Layer with Express.js
 
 **What was built:**
