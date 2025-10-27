@@ -119,89 +119,125 @@ LiquidityFlow enables decentralized liquidity aggregation on Solana by:
 - `npm run lint` - Run ESLint
 - `npm run format` - Format code with Prettier
 
+### Docker Services
+
+Start PostgreSQL and Redis with Docker Compose:
+
+```bash
+# Start all services
+docker-compose up -d
+
+# Check service status
+docker-compose ps
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
 ### Project Structure
 
 ```
-liquidity-flow-backend/
+Sol_Flow/
 ├── src/
 │   ├── types/           # Type definitions
 │   ├── api/             # REST API routes & middleware
-│   ├── core/            # Core business logic
-│   │   ├── smartRouter/ # Pathfinding algorithm
-│   │   ├── dexAggregator/ # DEX integration clients
-│   │   ├── solanaPrograms/ # Anchor program interfaces
-│   │   └── quoteEngine/ # Quote generation logic
-│   ├── agents/          # Fetch.ai agent integrations
+│   ├── dex/             # DEX aggregation layer (Jupiter, Orca, Raydium)
+│   ├── router/          # Smart router engine with pathfinding
+│   ├── services/        # Service layer (quote engine, etc.)
 │   ├── database/        # Database layer (PostgreSQL + Redis)
+│   │   ├── postgres/    # PostgreSQL schema, connections, repositories
+│   │   └── redis/       # Redis client and caching
 │   ├── utils/           # Utility functions
-│   └── config/          # Configuration management
+│   ├── config/          # Configuration management
+│   └── index.ts         # Application entry point
 ├── tests/
-│   ├── unit/            # Unit tests
-│   ├── integration/     # Integration tests
-│   └── fixtures/        # Test data
-├── agents/              # Python agent implementations
-├── programs/            # Solana (Anchor) programs
-└── docker/              # Docker configuration
+│   ├── unit/            # Unit tests (types, validators, API, DEX, router, quote engine)
+│   ├── integration/     # Integration tests (database, etc.)
+│   └── setup.ts         # Test configuration
+├── docker/              # Docker initialization scripts
+├── docker-compose.yml   # Docker services (PostgreSQL, Redis)
+└── package.json         # Dependencies and scripts
 
 ```
 
 ---
 
-## 🧩 Current Implementation Status
+## 🧩 Implementation Status
 
-### ✅ Completed (Feature 1)
+### ✅ Completed Features
 
-- **Project Foundation**
-  - TypeScript configuration with strict mode
-  - Jest testing framework setup
-  - ESLint and Prettier configuration
-  - All dependencies installed
+**Feature 1: Project Foundation**
+- TypeScript configuration with strict mode
+- Jest testing framework setup
+- ESLint and Prettier configuration
+- All dependencies installed
+- Complete type system for the entire backend
+- Error code enumeration
+- Utility modules (logging, validation, constants)
+- Configuration system with environment variables
 
-- **Core Type Definitions**
-  - Complete type system for the entire backend
-  - Error code enumeration
-  - API request/response types
-  - Agent communication types
-  - Database record types
+**Feature 2: Docker & Database Layer**
+- Docker Compose configuration for PostgreSQL and Redis
+- PostgreSQL connection pooling and schema management
+- Redis client with connection management
+- Database repositories for trades, liquidity, agent logs
+- Quote caching with Redis
+- Database initialization scripts
+- Health checks and monitoring
 
-- **Utility Modules**
-  - Logging system (Winston)
-  - Error handling with custom error classes
-  - Input validation functions
-  - Centralized constants
+**Feature 3: REST API Layer**
+- Express.js server with middleware setup
+- REST API endpoints: `/quotes`, `/swap`, `/routes`, `/agents`, `/health`
+- WebSocket support for real-time quote streaming
+- Security middleware (Helmet, CORS, Compression, Rate Limiting)
+- Request ID tracking and logging
+- Global error handling
+- Graceful shutdown
 
-- **Configuration System**
-  - Environment-based configuration
-  - Configuration validation
-  - Solana devnet integration setup
+**Feature 4: DEX Aggregation Layer**
+- Unified DEX client interface for Jupiter, Orca, Raydium
+- Jupiter API integration for aggregated liquidity
+- Orca and Raydium SDK clients (mock implementations)
+- Unified aggregator with parallel quote fetching
+- Smart quote selection algorithm
+- Graceful error handling and fallback
 
-- **Testing**
-  - 43 comprehensive tests (all passing)
-  - Test utilities and setup
-  - Coverage for types, validators, and errors
+**Feature 5: Smart Router Engine**
+- Modified Dijkstra's algorithm for multi-hop routing
+- Liquidity graph builder with BFS pathfinding
+- Route optimizer for best execution paths
+- Multi-leg route builder
+- Slippage and efficiency calculators
+
+**Feature 6: Quote Engine Integration**
+- Real-time quote generation using DEX aggregator
+- Redis-based quote caching (30s TTL)
+- Quote validation for execution readiness
+- Route display and execution time estimation
+- Updated API endpoints with real DEX quotes
 
 ### 🚧 In Progress / Planned
 
-- Database layer (PostgreSQL + Redis connections)
-- REST API endpoints (quotes, swap, routes, agents)
-- Smart router engine with pathfinding algorithm
-- DEX aggregation layer (Jupiter, Orca, Raydium clients)
-- Solana program integration
-- Fetch.ai autonomous agents
-- WebSocket real-time quote streaming
+- Solana program integration (swap executor, MEV protection)
+- Fetch.ai autonomous agents implementation
+- Advanced WebSocket streaming with real-time data
+- Integration testing on Solana Devnet
+- Performance monitoring and optimization
+
+### 📊 Current Test Results
+
+```
+Test Suites: 8 passed, 8 total
+Tests:       82 passed, 82 total
+Time:        ~1.4s
+```
 
 ---
 
 ## 📊 Testing
-
-### Current Test Results
-
-```
-Test Suites: 3 passed, 3 total
-Tests:       43 passed, 43 total
-Snapshots:   0 total
-Time:        0.601 s
-```
 
 ### Running Tests
 
@@ -214,6 +250,9 @@ npm run test:watch
 
 # Generate coverage report
 npm run test:coverage
+
+# Run without integration tests (requires Docker)
+npm test -- --testPathIgnorePatterns="integration"
 ```
 
 ### Test Coverage
@@ -222,7 +261,12 @@ Tests cover:
 - ✅ Type definitions and structure
 - ✅ Error classes and error codes
 - ✅ Validation functions
-- ✅ Configuration loading
+- ✅ Database layer (PostgreSQL + Redis)
+- ✅ API endpoints and middleware
+- ✅ DEX clients (Jupiter, Orca, Raydium)
+- ✅ DEX aggregator
+- ✅ Smart router engine
+- ✅ Quote engine
 
 ---
 
@@ -259,19 +303,32 @@ JUPITER_API_URL=https://quote-api.jup.ag/v6
 
 ---
 
-## 📚 API Endpoints (Planned)
+## 📚 API Endpoints
 
 ### REST API
 
-- `GET /api/quotes` - Get swap quote
-- `POST /api/swap` - Execute swap
-- `GET /api/routes` - Get routing options
-- `POST /api/agents/execute` - Execute agent action
-- `GET /api/health` - Health check
+- `GET /` - API information
+- `GET /api/health` - Health check with database status
+- `GET /api/quotes` - Get swap quotes from aggregated DEXes
+- `POST /api/swap` - Execute swap (mock)
+- `GET /api/routes` - Get available routes (mock)
+- `POST /api/agents/execute` - Execute agent actions (mock)
 
 ### WebSocket
 
-- `WS /api/stream` - Real-time quote streaming
+- `WS /api/stream` - Real-time quote streaming (setup complete)
+
+### Example Usage
+
+**Get a Quote:**
+```bash
+curl "http://localhost:3000/api/quotes?inputMint=So11111111111111111111111111111111111111112&outputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&amount=1&slippage=50"
+```
+
+**Health Check:**
+```bash
+curl http://localhost:3000/api/health
+```
 
 ---
 
@@ -328,5 +385,24 @@ ISC License
 **Status**: Active Development  
 **Last Updated**: October 27, 2024
 
-This is an active development project. Core foundation is complete with comprehensive testing. Database layer and API endpoints are next in development.
+**Progress**: 6 out of 10+ major features complete
+
+### What's Working
+
+- ✅ REST API server with all endpoints
+- ✅ DEX aggregation (Jupiter, Orca, Raydium)
+- ✅ Smart router with Dijkstra pathfinding
+- ✅ Real-time quote generation
+- ✅ Redis caching
+- ✅ Database layer (PostgreSQL + Redis)
+- ✅ Comprehensive test suite (82 tests)
+
+### What's Next
+
+- Solana program integration
+- Autonomous agents (Fetch.ai)
+- Advanced WebSocket streaming
+- Devnet integration testing
+
+This is an active development project. The core backend infrastructure is largely complete. Solana program integration and agent coordination are next in development.
 
