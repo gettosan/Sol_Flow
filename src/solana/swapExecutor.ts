@@ -6,6 +6,7 @@
 import { logger } from '../utils/logger';
 import { SwapQuote } from '../types';
 import { jupiterExecutor } from './jupiterExecutor';
+import { mevProtectionService } from './mevProtection';
 
 export interface SwapExecutionParams {
   quote: SwapQuote;
@@ -29,25 +30,61 @@ export class SwapExecutor {
   }
   
   /**
-   * Execute a swap transaction using Jupiter Ultra API
+   * Execute a swap transaction using Jupiter Ultra API with MEV protection
    */
   async executeSwap(params: SwapExecutionParams): Promise<SwapExecutionResult> {
     try {
       logger.info(`Executing real swap for user ${params.userWallet}`);
       
-      // Extract input/output mints from quote or use SOL/USDC by default
-      // For now, use default mints as routes don't always have inputMint/outputMint
+      // Step 1: Assess MEV risk
+      const swapValue = mevProtectionService['estimateSwapValue'](params.quote);
+      const riskAssessment = mevProtectionService.assessMevRisk(
+        params.quote,
+        BigInt(params.quote.inputAmount),
+        swapValue
+      );
+
+      logger.info('MEV Risk Assessment', {
+        level: riskAssessment.level,
+        score: riskAssessment.score,
+        protections: riskAssessment.protections,
+      });
+
+      // Step 2: Apply MEV protections
+      let protectedQuote = params.quote;
+      
+      if (riskAssessment.level === 'high' || riskAssessment.level === 'medium') {
+        // Randomize routes
+        const randomizedRoutes = mevProtectionService.randomizeRoute(params.quote.routes);
+        protectedQuote = {
+          ...params.quote,
+          routes: randomizedRoutes,
+        };
+
+        // Add time delay for high risk
+        if (riskAssessment.level === 'high') {
+          await mevProtectionService.addTimeDelay(500);
+        }
+      }
+
+      // Step 3: Extract input/output mints
       const inputMint = 'So11111111111111111111111111111111111111112'; // SOL
       const outputMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'; // USDC
       
-      // Execute real Jupiter swap
+      // Step 4: Execute real Jupiter swap with MEV protection
       const result = await jupiterExecutor.executeSwap({
         inputMint,
         outputMint,
-        amount: params.quote.inputAmount,
+        amount: protectedQuote.inputAmount,
         slippageBps: params.slippageBps || 50,
         userWallet: params.userWallet,
-        swapQuote: params.quote,
+        swapQuote: protectedQuote,
+      });
+      
+      logger.info('Swap executed with MEV protection', {
+        status: result.status,
+        transactionHash: result.transactionHash,
+        riskLevel: riskAssessment.level,
       });
       
       return {
@@ -56,7 +93,7 @@ export class SwapExecutor {
         inputAmount: params.quote.inputAmount,
         outputAmount: params.quote.outputAmount,
         actualPrice: this.calculateActualPrice(params.quote),
-        route: params.quote.routes,
+        route: protectedQuote.routes,
         timestamp: Date.now(),
       };
     } catch (error: any) {
