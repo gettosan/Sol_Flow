@@ -119,17 +119,27 @@ describe('Core Type Definitions', () => {
     });
 
     it('should properly type SwapRequest', () => {
-      const request: SwapRequest = {
+      const mockSwapQuote: SwapQuote = {
+        inputAmount: '1000000000',
+        outputAmount: '100000000',
+        priceImpact: 1.0,
+        routes: [],
+        estimatedGas: 3000,
+        timestamp: Date.now(),
         quoteId: 'test-quote-123',
-        userPublicKey: 'TestPublicKey123',
-        slippage: 1.0,
-        useMevProtection: true,
-        priority: 'high',
+        mevProtected: true,
+        expiresAt: Date.now() + 60000,
       };
 
-      expect(typeof request.quoteId).toBe('string');
-      expect(['low', 'medium', 'high']).toContain(request.priority);
-      expect(typeof request.useMevProtection).toBe('boolean');
+      const request: SwapRequest = {
+        quote: mockSwapQuote,
+        userWallet: 'TestPublicKey123',
+        slippageBps: 100,
+      };
+
+      expect(typeof request.quote.quoteId).toBe('string');
+      expect(typeof request.userWallet).toBe('string');
+      expect(typeof request.slippageBps).toBe('number');
     });
 
     it('should properly type ApiResponse', () => {

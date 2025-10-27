@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { Server } from 'http';
 import { AddressInfo } from 'net';
-import { io as Client } from 'socket.io-client';
+import { io } from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
 import { createServer } from 'http';
 import { setupPriceStream } from '../../src/api/websocket/priceStream';
@@ -32,7 +32,7 @@ describe('WebSocket Price Streaming Integration', () => {
       const address = server.address() as AddressInfo;
       port = address.port;
       
-      clientSocket = Client(`http://localhost:${port}`, {
+      clientSocket = io(`http://localhost:${port}`, {
         transports: ['websocket'],
       });
 
@@ -165,17 +165,20 @@ describe('WebSocket Price Streaming Integration', () => {
       });
 
       setTimeout(() => {
-        if (!done.called) {
-          done(new Error('No price update received'));
-        }
+        if (!done) return;
+        done(new Error('Timeout waiting for price update'));
       }, 10000);
     });
 
     it('should include confidence and MEV risk assessment', (done) => {
       const inputMint = 'So11111111111111111111111111111111111111112';
       const outputMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+      let updateReceived = false;
 
       clientSocket.on('price-update', (update: any) => {
+        if (updateReceived) return;
+        updateReceived = true;
+
         expect(update.confidence).toBeDefined();
         expect(typeof update.confidence).toBe('number');
         expect(update.confidence).toBeGreaterThanOrEqual(0);
@@ -198,7 +201,7 @@ describe('WebSocket Price Streaming Integration', () => {
       });
 
       setTimeout(() => {
-        if (!done.called) {
+        if (!updateReceived) {
           done(new Error('No price update received'));
         }
       }, 10000);

@@ -10,15 +10,16 @@ const router = Router();
  * POST /api/agents/execute
  * Execute an agent action
  */
-router.post('/execute', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/execute', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { agentType, action, params } = req.body;
 
     if (!agentType || !action) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Missing required fields: agentType, action',
       });
+      return;
     }
 
     let result: any;
@@ -49,10 +50,11 @@ router.post('/execute', async (req: Request, res: Response, next: NextFunction) 
         break;
 
       default:
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           error: `Unknown agent type: ${agentType}`,
         });
+        return;
     }
 
     res.json({
