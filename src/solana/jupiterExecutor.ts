@@ -3,7 +3,7 @@
  * Executes real swaps using Jupiter Ultra API
  */
 
-import { Connection, Keypair, Transaction } from '@solana/web3.js';
+import { Connection, Keypair, Transaction, PublicKey } from '@solana/web3.js';
 import axios from 'axios';
 import { logger } from '../utils/logger';
 import { config } from '../config';
@@ -55,13 +55,11 @@ export class JupiterExecutor {
   private connection: Connection;
   private ultraApiUrl: string;
   private quoteApiUrl: string;
-  private swapApiUrl: string;
 
   constructor() {
     this.connection = new Connection(config.solana.rpcEndpoint, config.solana.commitment);
     this.ultraApiUrl = 'https://lite-api.jup.ag/ultra/v1';
     this.quoteApiUrl = 'https://api.jup.ag/v6';
-    this.swapApiUrl = 'https://api.jup.ag/v6';
   }
 
   /**
@@ -136,7 +134,8 @@ export class JupiterExecutor {
   }
 
   /**
-   * Build transaction using Jupiter's swap API (fallback when Ultra returns no tx)
+   * Build transaction using Jupiter's /swap-instructions API (proper fallback)
+   * Based on OpenAPI spec: https://dev.jup.ag/docs/swap-api
    */
   async buildTransactionFromSwapAPI(params: {
     inputMint: string;
@@ -146,9 +145,9 @@ export class JupiterExecutor {
     userWallet: string;
   }): Promise<Transaction | null> {
     try {
-      logger.info('Attempting Jupiter quote + swap API');
+      logger.info('Attempting Jupiter swap-instructions API (v1)');
 
-      // First get a quote
+      // First get a quote from v6 API
       const quoteResponse = await axios.get(`${this.quoteApiUrl}/quote`, {
         params: {
           inputMint: params.inputMint,
@@ -158,8 +157,10 @@ export class JupiterExecutor {
         },
       });
 
-      logger.info('Got Jupiter quote', { 
+      logger.info('Got Jupiter v6 quote', { 
         outAmount: quoteResponse.data?.outAmount,
+        inputMint: quoteResponse.data?.inputMint,
+        outputMint: quoteResponse.data?.outputMint,
       });
 
       if (!quoteResponse.data || !quoteResponse.data.outAmount) {
@@ -167,36 +168,88 @@ export class JupiterExecutor {
         return null;
       }
 
-      // Then build swap transaction
-      const swapResponse = await axios.post(`${this.swapApiUrl}/swap`, {
-        quoteResponse: quoteResponse.data,
-        userPublicKey: params.userWallet,
-        wrapUnwrapSOL: true,
-        dynamicComputeUnitLimit: true,
-        prioritizationFeeLamports: 'auto',
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
+      // Get swap instructions from swap API
+      const instructionsUrl = 'https://api.jup.ag/swap/v1';
+      const swapInstructionsResponse = await axios.post(
+        `${instructionsUrl}/swap-instructions`,
+        {
+          userPublicKey: params.userWallet,
+          quoteResponse: quoteResponse.data,
+          wrapAndUnwrapSol: true,
+          dynamicComputeUnitLimit: true,
+          prioritizationFeeLamports: {
+            priorityLevelWithMaxLamports: {
+              priorityLevel: 'medium',
+              maxLamports: 100000,
+            },
+          },
         },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      logger.info('Got swap instructions', {
+        hasSetup: !!swapInstructionsResponse.data?.setupInstructions,
+        hasSwap: !!swapInstructionsResponse.data?.swapInstruction,
       });
 
-      logger.info('Got swap response', {
-        hasTransaction: !!swapResponse.data?.swapTransaction,
-      });
-
-      if (!swapResponse.data || !swapResponse.data.swapTransaction) {
-        logger.warn('No swap transaction in response');
+      if (!swapInstructionsResponse.data || !swapInstructionsResponse.data.swapInstruction) {
+        logger.warn('No swap instruction in response');
         return null;
       }
 
-      // Decode transaction
-      const transactionBuffer = Buffer.from(swapResponse.data.swapTransaction, 'base64');
-      const transaction = Transaction.from(transactionBuffer);
+      // Build transaction from instructions
+      const { swapInstruction, setupInstructions, computeBudgetInstructions, cleanupInstruction } = swapInstructionsResponse.data;
+      
+      // Get recent blockhash
+      const recentBlockhash = await this.connection.getLatestBlockhash('finalized');
 
-      logger.info('Successfully built transaction from swap API');
+      // Create transaction
+      const transaction = new Transaction({
+        recentBlockhash: recentBlockhash.blockhash,
+        feePayer: new PublicKey(params.userWallet),
+      });
+
+      // Helper function to convert accounts to TransactionInstruction format
+      const createInstruction = (inst: any) => ({
+        keys: inst.accounts.map((acc: any) => ({
+          pubkey: new PublicKey(acc.pubkey),
+          isSigner: acc.isSigner,
+          isWritable: acc.isWritable,
+        })),
+        programId: new PublicKey(inst.programId),
+        data: Buffer.from(inst.data, 'base64'),
+      });
+
+      // Add all instructions
+      if (computeBudgetInstructions) {
+        for (const inst of computeBudgetInstructions) {
+          transaction.add(createInstruction(inst));
+        }
+      }
+
+      if (setupInstructions) {
+        for (const inst of setupInstructions) {
+          transaction.add(createInstruction(inst));
+        }
+      }
+
+      // Add swap instruction
+      if (swapInstruction) {
+        transaction.add(createInstruction(swapInstruction));
+      }
+
+      if (cleanupInstruction) {
+        transaction.add(createInstruction(cleanupInstruction));
+      }
+
+      logger.info('Successfully built transaction from swap-instructions');
       return transaction;
     } catch (error: any) {
-      logger.error('Failed to build transaction from swap API', { 
+      logger.error('Failed to build transaction from swap-instructions API', { 
         error: error.message,
         stack: error.stack,
       });
