@@ -168,8 +168,8 @@ export class JupiterExecutor {
         return null;
       }
 
-      // Get swap instructions from swap API
-      const instructionsUrl = 'https://api.jup.ag/swap/v1';
+      // Get swap instructions from swap API (using lite-api for free tier, no API key needed)
+      const instructionsUrl = 'https://lite-api.jup.ag/swap/v1';
       const swapInstructionsResponse = await axios.post(
         `${instructionsUrl}/swap-instructions`,
         {
