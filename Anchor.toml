@@ -1,0 +1,37 @@
+[toolchain]
+
+[features]
+resolution = false
+skip-lint = false
+
+[test]
+startup_wait = 10000
+upgrade_authority_keypair = ""
+
+[scripts]
+test = "yarn run mocha -t 100000000 tests/**/*.ts"
+
+[provider]
+cluster = "Devnet"
+wallet = "~/.config/solana/id.json"
+
+[test.validator.clone]
+upgrade_loader = "BPFLoaderUpgradeab1e11111111111111111111111"
+
+[test.validator.clone]
+account = ["metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s", "metaqxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"]
+
+[registry]
+url = "https://api.apr.dev"
+
+[build]
+cargo = "cargo"
+features = []
+skip-lint = false
+
+[programs.devnet]
+liquidityflow = "LiFy1234567890abcdefghijklmnopqrstuv"
+
+[programs.localnet]
+liquidityflow = "LiFy1234567890abcdefghijklmnopqrstuv"
+
