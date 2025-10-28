@@ -60,8 +60,8 @@ export class JupiterExecutor {
   constructor() {
     this.connection = new Connection(config.solana.rpcEndpoint, config.solana.commitment);
     this.ultraApiUrl = 'https://lite-api.jup.ag/ultra/v1';
-    this.quoteApiUrl = 'https://quote-api.jup.ag';
-    this.swapApiUrl = 'https://quote-api.jup.ag';
+    this.quoteApiUrl = 'https://quote-api.jup.ag/v6';
+    this.swapApiUrl = 'https://quote-api.jup.ag/v6';
   }
 
   /**
@@ -141,6 +141,8 @@ export class JupiterExecutor {
     userWallet: string;
   }): Promise<Transaction | null> {
     try {
+      logger.info('Attempting Jupiter quote + swap API');
+
       // First get a quote
       const quoteResponse = await axios.get(`${this.quoteApiUrl}/quote`, {
         params: {
@@ -148,16 +150,15 @@ export class JupiterExecutor {
           outputMint: params.outputMint,
           amount: params.amount,
           slippageBps: params.slippageBps || 50,
-          onlyDirectRoutes: false,
-          asLegacyTransaction: false,
         },
       });
 
       logger.info('Got Jupiter quote', { 
-        quoteResponse: !!quoteResponse.data,
+        outAmount: quoteResponse.data?.outAmount,
       });
 
-      if (!quoteResponse.data) {
+      if (!quoteResponse.data || !quoteResponse.data.outAmount) {
+        logger.warn('No quote received from Jupiter');
         return null;
       }
 
@@ -168,6 +169,14 @@ export class JupiterExecutor {
         wrapUnwrapSOL: true,
         dynamicComputeUnitLimit: true,
         prioritizationFeeLamports: 'auto',
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      logger.info('Got swap response', {
+        hasTransaction: !!swapResponse.data?.swapTransaction,
       });
 
       if (!swapResponse.data || !swapResponse.data.swapTransaction) {
@@ -179,11 +188,12 @@ export class JupiterExecutor {
       const transactionBuffer = Buffer.from(swapResponse.data.swapTransaction, 'base64');
       const transaction = Transaction.from(transactionBuffer);
 
+      logger.info('Successfully built transaction from swap API');
       return transaction;
     } catch (error: any) {
       logger.error('Failed to build transaction from swap API', { 
         error: error.message,
-        response: error.response?.data,
+        stack: error.stack,
       });
       return null;
     }
