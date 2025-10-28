@@ -60,8 +60,8 @@ export class JupiterExecutor {
   constructor() {
     this.connection = new Connection(config.solana.rpcEndpoint, config.solana.commitment);
     this.ultraApiUrl = 'https://lite-api.jup.ag/ultra/v1';
-    this.quoteApiUrl = 'https://quote-api.jup.ag/v6';
-    this.swapApiUrl = 'https://quote-api.jup.ag/v6';
+    this.quoteApiUrl = 'https://api.jup.ag/v6';
+    this.swapApiUrl = 'https://api.jup.ag/v6';
   }
 
   /**
