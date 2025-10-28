@@ -54,10 +54,14 @@ export interface JupiterExecuteResponse {
 export class JupiterExecutor {
   private connection: Connection;
   private ultraApiUrl: string;
+  private quoteApiUrl: string;
+  private swapApiUrl: string;
 
   constructor() {
     this.connection = new Connection(config.solana.rpcEndpoint, config.solana.commitment);
     this.ultraApiUrl = 'https://lite-api.jup.ag/ultra/v1';
+    this.quoteApiUrl = 'https://quote-api.jup.ag';
+    this.swapApiUrl = 'https://quote-api.jup.ag';
   }
 
   /**
@@ -127,6 +131,65 @@ export class JupiterExecutor {
   }
 
   /**
+   * Build transaction using Jupiter's swap API (fallback when Ultra returns no tx)
+   */
+  async buildTransactionFromSwapAPI(params: {
+    inputMint: string;
+    outputMint: string;
+    amount: string;
+    slippageBps?: number;
+    userWallet: string;
+  }): Promise<Transaction | null> {
+    try {
+      // First get a quote
+      const quoteResponse = await axios.get(`${this.quoteApiUrl}/quote`, {
+        params: {
+          inputMint: params.inputMint,
+          outputMint: params.outputMint,
+          amount: params.amount,
+          slippageBps: params.slippageBps || 50,
+          onlyDirectRoutes: false,
+          asLegacyTransaction: false,
+        },
+      });
+
+      logger.info('Got Jupiter quote', { 
+        quoteResponse: !!quoteResponse.data,
+      });
+
+      if (!quoteResponse.data) {
+        return null;
+      }
+
+      // Then build swap transaction
+      const swapResponse = await axios.post(`${this.swapApiUrl}/swap`, {
+        quoteResponse: quoteResponse.data,
+        userPublicKey: params.userWallet,
+        wrapUnwrapSOL: true,
+        dynamicComputeUnitLimit: true,
+        prioritizationFeeLamports: 'auto',
+      });
+
+      if (!swapResponse.data || !swapResponse.data.swapTransaction) {
+        logger.warn('No swap transaction in response');
+        return null;
+      }
+
+      // Decode transaction
+      const transactionBuffer = Buffer.from(swapResponse.data.swapTransaction, 'base64');
+      const transaction = Transaction.from(transactionBuffer);
+
+      return transaction;
+    } catch (error: any) {
+      logger.error('Failed to build transaction from swap API', { 
+        error: error.message,
+        response: error.response?.data,
+      });
+      return null;
+    }
+  }
+
+  /**
    * Sign transaction with backend wallet
    */
   async signTransaction(transaction: Transaction, keypair: Keypair): Promise<Transaction> {
@@ -175,11 +238,23 @@ export class JupiterExecutor {
         outAmount: order.outAmount,
       });
 
-      // Step 2: Build transaction
-      const unsignedTransaction = await this.buildTransaction(order);
+      // Step 2: Build transaction with fallback
+      let unsignedTransaction = await this.buildTransaction(order);
+      
+      // Fallback: If Ultra API doesn't return transaction, use quote + swap API
+      if (!unsignedTransaction && params.userWallet) {
+        logger.info('Ultra API returned no transaction, trying quote + swap API');
+        unsignedTransaction = await this.buildTransactionFromSwapAPI({
+          inputMint: params.inputMint,
+          outputMint: params.outputMint,
+          amount: params.amount,
+          slippageBps: params.slippageBps,
+          userWallet: params.userWallet,
+        });
+      }
 
       if (!unsignedTransaction) {
-        throw new Error('Failed to build transaction');
+        throw new Error('Failed to build transaction from Jupiter');
       }
 
       // Step 3: Load backend wallet
