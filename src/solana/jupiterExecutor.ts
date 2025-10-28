@@ -103,19 +103,24 @@ export class JupiterExecutor {
 
   /**
    * Build unsigned transaction from Jupiter order
+   * Based on OpenAPI spec: transaction can be base64 string, null, or empty string
    */
   async buildTransaction(order: JupiterOrderResponse): Promise<Transaction | null> {
     try {
-      if (!order.transaction) {
-        logger.warn('No transaction in Jupiter order response');
-        return null;
-      }
-
-      if (order.transaction === '') {
-        logger.error('Transaction is empty string', { 
-          errorCode: order.errorCode,
-          errorMessage: order.errorMessage 
-        });
+      // Check if transaction exists per OpenAPI spec
+      if (!order.transaction || order.transaction === '') {
+        // Per spec: If taker is defined and transaction is empty string, error fields are present
+        if (order.taker && order.transaction === '' && order.errorCode) {
+          logger.error('Jupiter returned error', { 
+            errorCode: order.errorCode,
+            errorMessage: order.errorMessage,
+            taker: order.taker
+          });
+        } else if (!order.transaction) {
+          logger.warn('No transaction in Jupiter order response (null)');
+        } else {
+          logger.warn('Transaction is empty string - insufficient liquidity or funds');
+        }
         return null;
       }
 
